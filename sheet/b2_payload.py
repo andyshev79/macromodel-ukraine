@@ -6,7 +6,7 @@ Forecast formulas are written once (column BB) and copied right in the sheet.
 import json
 import sys
 
-from macromodel.blocks.demand import COMPONENTS, coef_table, real_levels_q, regressors
+from macromodel.blocks.demand import COMPONENTS, coef_table, link_other_to_consumption, real_levels_q, regressors
 from macromodel.blocks.real_sector import annual_growth
 
 COEF_FIRST = 23  # B1 uses COEFS rows 5-22
@@ -52,7 +52,7 @@ top = [
     ["PORTS", "Пропускная способность портов", "млн т", "=B1_REAL!D12", "=B1_REAL!E12", "=B1_REAL!F12", "=B1_REAL!G12", "из B1_REAL"],
     ["DEF", "Расходы на оборону", "% ВВП", "=B1_REAL!D15", "=B1_REAL!E15", "=B1_REAL!F15", "=B1_REAL!G15", "из B1_REAL"],
     ["REAL_WAGE", "Рост реальной зарплаты", "%", round(float(x["REAL_WAGE"]), 1)]
-    + [f"={c}11+{C('RW', 'GAP')}" for c in "EFG"] + ["ВВП + разрыв из COEFS, до блока B4"],
+    + [f"={p}11+{C('RW', 'GAP')}" for p in "DEF"] + ["ВВП прошлого года + разрыв из COEFS (лаг убирает циклическую ссылку с B1), до блока B4"],
     ["REAL_DEF", "Рост реальных расходов на оборону", "%", round(float(x["REAL_DEF"]), 1)]
     + [f"=({c}13/{p}13)*(1+{c}11/100)*100-100" for c, p in zip("EFG", "DEF")] + ["доля в ВВП × реальный ВВП"],
 ]
@@ -102,4 +102,9 @@ con.append(["GDP_REAL_E", "Рост ВВП по расходам, % г/г"])
 out["B2_DEMAND!A40:H48"] = con
 out["B2_DEMAND!L42"] = [["=IFERROR((L32-H32)/H$38*100;\"\")"]]
 out["B2_DEMAND!L46"] = [["=IFERROR(-(L36-H36)/H$38*100;\"\")"]]
+link = link_other_to_consumption()
+out["COEFS!A35:L35"] = [["GVA_OTHER_HH", "B1", "GVA_OTHER", "GDPE_HH", round(float(link["coef"]["HH"]), 2),
+                         round(float(link["se"]["HH"]), 2), round(float(link["coef"]["HH"] / link["se"]["HH"]), 1),
+                         "2016–2025", "оценка МНК 2016–2025, годовые, дамми 2022", round(float(link["r2"]), 2),
+                         "2026-10-21", "Торговля и госуправление к спросу не привязаны: оценка дала отрицательный наклон"]]
 json.dump(out, sys.stdout, ensure_ascii=False)

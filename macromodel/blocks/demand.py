@@ -113,3 +113,18 @@ if __name__ == "__main__":
     for c, r in estimate().items():
         cs = ", ".join(f"{k}={v:.2f} ({r['se'][k]:.2f})" for k, v in r["coef"].items())
         print(f"{c:5s} n={r['n']} R2={r['r2']:.2f} rmse={r['rmse']:.1f}  {cs}")
+
+
+def link_other_to_consumption(first="2016", last="2025") -> dict:
+    """GVA of other sectors and net taxes (B1) on household consumption (B2).
+
+    Trade (G) and public administration (O) were tried against household and
+    government consumption too; their slopes came out negative, so they keep
+    their own equations in B1.
+    """
+    from macromodel.blocks import real_sector
+
+    y = annual_growth(real_sector.real_levels_q())["OTHER"]
+    x = pd.concat([annual_growth(real_levels_q())["HH"], regressors()["WAR22"]], axis=1)
+    df = pd.concat([y.rename("OTHER"), x], axis=1).loc[first:last].dropna()
+    return ols(df["OTHER"], df[["HH", "WAR22"]])
