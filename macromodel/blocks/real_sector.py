@@ -153,7 +153,10 @@ COEF_ROWS = [
 
 
 def coef_table() -> list[dict]:
+    from macromodel.blocks.demand import link_other_to_consumption
+
     est = estimate()
+    est["OTHER"] = link_other_to_consumption()  # COEFS row 35 holds its HH slope
     rows = []
     for s, var in COEF_ROWS:
         if (s, var) in CALIBRATED:
