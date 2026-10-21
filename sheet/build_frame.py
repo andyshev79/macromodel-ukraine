@@ -131,7 +131,7 @@ ANCH = [
     ("FIN_GAP_USD", "Разрыв финансирования (потребность − получено)", "млн USD", "B6", "SUM", "формула", "=IF(COUNT({c}{FIN_NEED_USD},{c}{FIN_RECEIVED_USD})<2,\"\",{c}{FIN_NEED_USD}-{c}{FIN_RECEIVED_USD})"),
     ("DEBT_GDP", "Государственный и гарантированный долг", "% ВВП, конец периода", "B6", "END", "Минфин", None),
     ("ELEC_CONS", "Потребление электроэнергии", "млн кВт·ч", "B8", "SUM", "Укрэнерго / оценка", None),
-    ("FREIGHT", "Грузооборот", "млн т·км", "B8", "SUM", "Госстат", None),
+    ("FREIGHT", "Перевезення вантажів", "млн т", "B8", "SUM", "Госстат (MacroStat)", None),
 ]
 FIRST = 5
 ROW = {a[0]: FIRST + i for i, a in enumerate(ANCH)}
