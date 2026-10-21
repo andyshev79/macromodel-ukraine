@@ -32,10 +32,18 @@ out.mkdir(parents=True, exist_ok=True)
 anchors.to_csv(out / "anchors_q.csv")
 series.to_csv(out / "series_q.csv")
 catalog.to_csv(out / "catalog.csv", index=False)
+try:
+    schedule = history.debt_schedule(ROOT / "data" / "raw")
+    schedule.to_csv(out / "debt_schedule_y.csv")
+except FileNotFoundError as e:
+    schedule = None
+    errors.append(f"debt_schedule: {e}")
 with pd.ExcelWriter(out / "history.xlsx") as xw:
     anchors.to_excel(xw, sheet_name="ANCHORS_FACT")
     series.to_excel(xw, sheet_name="SERIES_Q")
     catalog.to_excel(xw, sheet_name="CATALOG", index=False)
+    if schedule is not None:
+        schedule.to_excel(xw, sheet_name="DEBT_SCHEDULE_Y")
 
 print(catalog[["table", "code", "first", "last", "n"]].to_string(index=False))
 for e in errors:

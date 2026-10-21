@@ -17,7 +17,7 @@ import pandas as pd
 
 from macromodel.aggregate import to_quarter
 from macromodel.anchors import ANCHORS
-from macromodel.loaders import minfin_index, nbu, nbu_api, worldbank
+from macromodel.loaders import macrostat, minfin_index, nbu, nbu_api, nbu_monetary, worldbank
 
 BASE_YEAR = 2021  # real GDP is expressed in average prices of this year
 
@@ -42,6 +42,23 @@ class Data:
         self._wb: dict[str, pd.Series] = {}
         self._fx = None
         self._debt = None
+        self._money = None
+
+    @property
+    def macrostat(self) -> Path:
+        """Andrey's MacroStat export; recipes that need it fail (and are reported) without it."""
+        path = self.cache / "manual" / "MacroStat.xlsx"
+        if not path.exists():
+            raise FileNotFoundError(f"{path} not found: export MacroStat from Google Sheets as .xlsx")
+        return path
+
+    def money(self) -> pd.DataFrame:
+        if self._money is None:
+            path = self.cache / "nbu_ms_oper.xlsx"
+            if self.refresh_from is not None or not path.exists():
+                path = nbu_monetary.download(self.cache)
+            self._money = nbu_monetary.month_end(path)
+        return self._money
 
     def nbu(self, name: str) -> pd.DataFrame:
         if name not in self._nbu:
@@ -230,6 +247,18 @@ def _elec(d):
     return annual_to_q(kwh.dropna(), "SUM")
 
 
+def _wage(d):
+    """Monthly Gosstat wages from the API; quarters the API skips (2022-2023, 2024H2) from
+    the quarterly figures in MacroStat, only up to the last quarter the API covers."""
+    api = m_to_q(d.s("labour_m", "lmss_fund_pay_wage", "N_ONE", mcrk110="TOTAL"), "AVG")
+    try:
+        ms = macrostat.wages_q(d.macrostat)
+    except FileNotFoundError:
+        return api
+    gaps = ms[(ms.index <= api.index.max()) & ~ms.index.isin(api.index)]
+    return pd.concat([api, gaps]).sort_index()
+
+
 def _unemp(d):
     lfs = (_lfs(d, "lmss_actnas_up1570ap_") / _lfs(d, "lmss_actnas_eap1570ap_") * 100)
     return q_label(lfs)
@@ -251,7 +280,7 @@ ANCHOR_RECIPES = [
     Recipe("POP", "", "", "Всемирный банк (оценка)", "SP.POP.TOTL, годовое значение на все кварталы; вся Украина по оценке ВБ, не подконтрольная территория", lambda d: annual_to_q(d.wb("SP.POP.TOTL") / 1e6, "AVG")),
     Recipe("EMPL", "", "", "НБУ API (Госстат, ОРС)", "Занятые 15–70, из накопленных средних; обследование прекращено после 2021", lambda d: q_label(_lfs(d, "lmss_actnas_ep1570ap_"))),
     Recipe("UNEMP", "", "", "НБУ API (Госстат, ОРС)", "Безработные / экономически активные 15–70; после 2021 нет данных", _unemp),
-    Recipe("WAGE_NOM", "", "", "НБУ API (Госстат)", "Средняя месячная зарплата, среднее за квартал", lambda d: m_to_q(d.s("labour_m", "lmss_fund_pay_wage", "N_ONE", mcrk110="TOTAL"), "AVG")),
+    Recipe("WAGE_NOM", "", "", "НБУ API (Госстат); пропуски из MacroStat", "Средняя месячная зарплата, среднее за квартал; 2022–2023 и 2024Q3–Q4 из квартальных данных Госстата (лист Salary)", _wage),
     Recipe("EXP_USD", "", "", "НБУ API (платёжный баланс)", "Товары и услуги, кредит, сумма месяцев", lambda d: m_to_q(_bop(d, "G_S", t023="1"), "SUM")),
     Recipe("IMP_USD", "", "", "НБУ API (платёжный баланс)", "Товары и услуги, дебет, сумма месяцев", lambda d: m_to_q(_bop(d, "G_S", t023="2"), "SUM")),
     Recipe("TRADE_BAL", "", "", "расчёт", "EXP_USD − IMP_USD", lambda d: m_to_q(_bop(d, "G_S", t023="1") - _bop(d, "G_S", t023="2"), "SUM")),
@@ -264,7 +293,7 @@ ANCHOR_RECIPES = [
     Recipe("FIN_GAP_USD", "", "", "расчёт", "FIN_NEED_USD − FIN_RECEIVED_USD, считается в блоке B6", lambda d: pd.Series(dtype=float)),
     Recipe("DEBT_GDP", "", "", "Минфин (index.minfin.com.ua)", "Государственный и гарантированный долг на конец квартала / сумма номинального ВВП за 4 квартала", _debt_gdp),
     Recipe("ELEC_CONS", "", "", "Всемирный банк (оценка)", "EG.USE.ELEC.KH.PC × население, годовое поровну на кварталы; до 2024, вся Украина", _elec),
-    Recipe("FREIGHT", "", "", "нет источника", "stat.gov.ua недоступен из облака; нужна выгрузка вручную", lambda d: pd.Series(dtype=float)),
+    Recipe("FREIGHT", "", "", "Госстат (MacroStat, лист SectorIndexes M)", "Перевезено грузов за месяц, сумма за квартал; ряд с 2018", lambda d: m_to_q(macrostat.freight_m(d.macrostat), "SUM")),
 ]
 
 
@@ -343,10 +372,31 @@ def _series_recipes() -> list[Recipe]:
                lambda d: q_label(d.s("ext_debt_q", "ED_GG", "T071USD_7"))),
         Recipe("DEBT_UAH", "Государственный и гарантированный долг", "млн грн", "Минфин (index.minfin.com.ua)", "Конец квартала",
                lambda d: m_to_q(d.debt()["total"], "END")),
+        Recipe("REG_UNEMP", "Зарегистрированные безработные, конец квартала", "тыс. человек", "ГЦЗ (MacroStat, лист Salary)", "Конец квартала",
+               lambda d: m_to_q(macrostat.registered_unemployed_m(d.macrostat), "END")),
+        Recipe("EXT_FIN_GROSS_USD", "Валовое внешнее финансирование бюджета", "млн USD", "MacroStat, лист Help (Минфин)",
+               "Строка TOTAL: 2022–2023 годовые суммы поровну на кварталы, с 2024 по месяцам",
+               lambda d: _past(macrostat.external_financing_q(d.macrostat))),
+        Recipe("DEBT_PAY_UAH", "Платежи по госдолгу (обслуживание + погашение)", "млн грн", "MacroStat, лист Debt (Минфин)",
+               "Сумма месяцев; с 2022", lambda d: _past(m_to_q(macrostat.debt_payments_m(d.macrostat)["total"] * 1000, "SUM"))),
+        Recipe("DEBT_PAY_EXT_UAH", "Платежи по внешнему госдолгу", "млн грн", "MacroStat, лист Debt (Минфин)",
+               "Всего минус внутренний долг, сумма месяцев; 2024Q3 включает реструктуризацию еврооблигаций",
+               lambda d: _past(m_to_q(macrostat.debt_payments_m(d.macrostat)["external"] * 1000, "SUM"))),
+        Recipe("MONETARY_BASE", "Денежная база", "млн грн", "НБУ (ms_oper.xlsx)", "Конец квартала",
+               lambda d: m_to_q(d.money()["MONETARY_BASE"], "END")),
+        Recipe("NBU_CD", "Депозитные сертификаты НБУ (избыток ликвидности)", "млн грн", "НБУ (ms_oper.xlsx)", "Конец квартала",
+               lambda d: m_to_q(d.money()["NBU_CD"], "END")),
+        Recipe("NIR_USD", "Чистые международные резервы", "млн USD", "НБУ (ms_oper.xlsx)", "Конец квартала",
+               lambda d: m_to_q(d.money()["NIR_USD"], "END")),
         Recipe("WB_UNEMP", "Безработица, модельная оценка МОТ", "%", "Всемирный банк", "SL.UEM.TOTL.ZS, годовое на все кварталы",
                lambda d: annual_to_q(d.wb("SL.UEM.TOTL.ZS"), "AVG")),
     ]
     return r
+
+
+def _past(s: pd.Series) -> pd.Series:
+    """Drop quarters that have not ended: sheets carry schedules and plans forward."""
+    return s[s.index < str(pd.Period(date.today(), "Q"))]
 
 
 def _qoq(mom: pd.Series) -> pd.Series:
@@ -391,3 +441,8 @@ def build(cache: Path, start_year: int = 2015, refresh_from: int | None = None):
     series, cat_s, err_s = _run(SERIES_RECIPES, d, first, last)
     catalog = pd.DataFrame([{**c, "table": "anchors"} for c in cat_a] + [{**c, "table": "series"} for c in cat_s])
     return anchors, series, catalog, err_a + err_s
+
+
+def debt_schedule(cache: Path) -> pd.DataFrame:
+    """MinFin annual debt payment schedule (UAH billion) for the financing-need block."""
+    return macrostat.debt_schedule_y(Data(cache, 2015, None).macrostat)

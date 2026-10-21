@@ -72,3 +72,22 @@ def test_annual_to_q():
 def test_every_anchor_has_a_recipe():
     from macromodel.anchors import ANCHORS
     assert [a.code for a in ANCHORS] == [r.code for r in h.ANCHOR_RECIPES]
+
+
+def test_macrostat_external_financing_layouts(tmp_path):
+    import openpyxl
+    from macromodel.loaders import macrostat
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Help"
+    head = ["US$, m", 2022, None, None, "янв-фев", "мар", "апр", "дек", 2024, 2025]
+    total = ["TOTAL", 10, 10, 400, 5, 7, 11, 13, 36, 999]
+    ws.append(head)
+    ws.append(total)
+    path = tmp_path / "ms.xlsx"
+    wb.save(path)
+    q = macrostat.external_financing_q(path)
+    assert q["2022Q1"] == 100
+    assert q["2024Q1"] == 12 and q["2024Q2"] == 11 and q["2024Q4"] == 13
+    assert not any(k.startswith("2025") for k in q.index)

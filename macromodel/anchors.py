@@ -45,7 +45,7 @@ ANCHORS = [
     Anchor("FIN_GAP_USD", "Разрыв финансирования", "млн USD", "B6", "SUM", "формула"),
     Anchor("DEBT_GDP", "Госдолг", "% ВВП", "B6", "END", "Минфин"),
     Anchor("ELEC_CONS", "Потребление электроэнергии", "млн кВт·ч", "B8", "SUM", "Укрэнерго / оценка"),
-    Anchor("FREIGHT", "Грузооборот", "млн т·км", "B8", "SUM", "Госстат"),
+    Anchor("FREIGHT", "Перевезення вантажів", "млн т", "B8", "SUM", "Госстат (MacroStat)"),
 ]
 
 BY_CODE = {a.code: a for a in ANCHORS}
