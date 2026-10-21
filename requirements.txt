@@ -1,0 +1,8 @@
+pandas>=2.1
+requests>=2.31
+openpyxl>=3.1
+xlrd>=2.0
+statsmodels>=0.14
+gspread>=6.0
+google-auth>=2.29
+pytest>=8.0
