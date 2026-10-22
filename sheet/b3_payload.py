@@ -66,8 +66,8 @@ top = [
     [""],
     ["2. Цены, средний рост за год, %"],
     ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
-    ["CPI_M", "ИПЦ, модель", f"{k('CPI','WAGE')} × рост зарплаты + {k('CPI','FX')} × девальвация", round(float(a["CPI"]), 1)]
-    + [f"={C('CPI','const')}+{C('CPI','FX')}*{c}11+{C('CPI','WAGE')}*{c}12" for c in "EFG"]
+    ["CPI_M", "ИПЦ, модель", f"{k('CPI','WAGE')} × рост зарплаты + {k('CPI','FX')} × девальвация + влияние ставки (B7)", round(float(a["CPI"]), 1)]
+    + [f"={C('CPI','const')}+{C('CPI','FX')}*{c}11+{C('CPI','WAGE')}*{c}12+B7_MONETARY!{c}42" for c in "EFG"]
     + ["R² 0,90; война 2022 — дамми +17 п.п."],
     ["CPI_YOY", "ИПЦ с учётом факта", "среднее кварталов ANCHORS"] + [f"={avg(c, 10)}" for c in "DEFG"],
     ["PPI_M", "ИЦП, модель", f"{k('PPI','CPI')} × ИПЦ + {k('PPI','TTF')} × рост цены газа", round(float(a["PPI"]), 1)]
@@ -86,7 +86,8 @@ top = [
     ["CPI_WAGE", "Зарплаты", "", ""] + [f"={C('CPI','WAGE')}*{c}12" for c in "EFG"],
     ["CPI_FX", "Курс", "", ""] + [f"={C('CPI','FX')}*{c}11" for c in "EFG"],
     ["CPI_CONST", "Константа", "", ""] + [f"={C('CPI','const')}" for c in "EFG"],
-    ["CPI_M", "ИПЦ, модель", "", ""] + [f"=SUM({c}31:{c}33)" for c in "EFG"],
+    ["CPI_RATE", "Ставка НБУ прошлого года", "", ""] + [f"=B7_MONETARY!{c}42" for c in "EFG"],
+    ["CPI_M", "ИПЦ, модель", "", ""] + [f"=SUM({c}31:{c}34)" for c in "EFG"],
 ]
 out[f"B3_PRICES!A1:H{len(top)}"] = top
 

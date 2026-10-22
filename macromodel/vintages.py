@@ -27,6 +27,11 @@ INPUT_CODES = ["CEASEFIRE_Q", "ENERGY_STRIKES", "ENERGY_CAP", "PORTS_CAP", "FIN_
                "GUEST", "MIGR_UA_SHARE", "GUEST_SHARE"]
 
 
+# Every vintage carries text conclusions; key points and bottlenecks are required.
+SECTIONS = ["Ключевой момент", "Узкое место", "Риск", "Изменение к прошлой версии", "Ограничение модели"]
+REQUIRED = ["Ключевой момент", "Узкое место"]
+
+
 def num(s):
     """Sheet display value ('4 878 980,5', '8,9%', '') -> float or None; other text stays text."""
     if s is None or s == "":
@@ -40,14 +45,20 @@ def num(s):
         return str(s)
 
 
-def build(meta: dict, annual: list, scenarios: list, checks: list, conclusions: list[str],
+def build(meta: dict, annual: list, scenarios: list, checks: list, conclusions: list,
           years: list[int]) -> pd.DataFrame:
     """Rows of one vintage.
 
     annual: [code, name, units, agg, base_year_value, y1, y2, y3]
     scenarios: [name, units, y1, y2, y3] for SCENARIOS rows 16-33 (active columns)
     checks: [code, name, units, y1, y2, y3, status1, status2, status3]
+    conclusions: [section, text] with section from SECTIONS (kept in the name column)
     """
+    sections = [c[0] for c in conclusions]
+    missing = [s for s in REQUIRED if s not in sections]
+    unknown = sorted(set(sections) - set(SECTIONS))
+    if missing or unknown:
+        raise ValueError(f"conclusions: missing sections {missing}, unknown sections {unknown}")
     n = len(years)
     base = years[0] - 1
     rows = []
@@ -61,8 +72,8 @@ def build(meta: dict, annual: list, scenarios: list, checks: list, conclusions: 
     for code, name, units, *rest in checks:
         for y, v, st in zip(years, rest[:n], rest[n:]):
             add(kind="check", code=code, name=name, units=units, year=y, value=num(v), status=st)
-    for i, text in enumerate(conclusions, 1):
-        add(kind="conclusion", code=f"C{i}", note=text)
+    for i, (section, text) in enumerate(conclusions, 1):
+        add(kind="conclusion", code=f"C{i}", name=section, note=text)
     return pd.DataFrame(rows).reindex(columns=COLUMNS)
 
 
