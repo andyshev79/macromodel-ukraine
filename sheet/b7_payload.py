@@ -7,7 +7,7 @@ so there is no circular reference.
 import json
 import sys
 
-from macromodel.blocks.monetary import annual, coef_table, credit_q
+from macromodel.blocks.monetary import annual, coef_table, credit_q, transmission_table
 
 COEF_FIRST = 65  # B1 5-22, B2 23-35, B3 36-44, B4 45-52, B5 53-59, B6 60-64
 coefs = coef_table()
@@ -15,7 +15,14 @@ crow = {(r["eq"], r["var"]): COEF_FIRST + i for i, r in enumerate(coefs)}
 C = lambda eq, v: f"COEFS!$E${crow[(eq, v)]}"
 k = lambda eq, v: f"{next(r['coef'] for r in coefs if (r['eq'], r['var']) == (eq, v)):g}".replace(".", ",")
 
+TR_FIRST = 85  # after B8 (80-84)
+tr = transmission_table()
+T = lambda v: f"COEFS!$E${TR_FIRST + [r['var'] for r in tr].index(v)}"
+tk = lambda v: f"{next(r['coef'] for r in tr if r['var'] == v):g}".replace(".", ",").replace("-", "−")
+
 out = {}
+out[f"COEFS!A{TR_FIRST}:L{TR_FIRST + len(tr) - 1}"] = [
+    [f"TR_{r['var']}", "B7", r["eq"], r["var"], r["coef"], "", "", "2016–2025", "калибровка", "", "2026-10-22", r["note"]] for r in tr]
 out[f"COEFS!A{COEF_FIRST}:L{COEF_FIRST + len(coefs) - 1}"] = [
     [f"{r['eq']}_{r['var']}", "B7", r["eq"], r["var"], r["coef"], "" if r["se"] is None else r["se"],
      "" if not r["se"] else round(r["coef"] / r["se"], 1), "2016–2025" if r["se"] else "2025", r["method"],
@@ -33,8 +40,8 @@ rows = [
     [""],
     ["Что считает", "Учётная ставка НБУ, ставки по новым кредитам и депозитам, кредиты и депозиты в гривне, избыточная ликвидность"],
     ["Берёт", "B3_PRICES (ИПЦ, номинальный ВВП), B5_EXTERNAL (резервы), ANCHORS (факт ставок), COEFS"],
-    ["Пишет в ANCHORS", "NBU_RATE (с 2027), LOAN_RATE и DEP_RATE (с 2026Q3)"],
-    ["Статус", "в работе: версия 1"],
+    ["Пишет в ANCHORS", "NBU_RATE (с 2027), LOAN_RATE и DEP_RATE (с 2026Q3); через раздел 4 — в B1, B2, B3 (спрос и инфляция)"],
+    ["Статус", "в работе: версия 2 (ставка влияет на спрос и инфляцию)"],
     ["Как читать", "Ставка на конец года по правилу; внутри года ставка идёт к ней равными шагами. Кредиты, депозиты и сертификаты НБУ — млрд грн на конец года."],
     [""],
     ["1. Драйверы"],
@@ -72,6 +79,16 @@ rows = [
     ["CD", "Депозитные сертификаты НБУ (избыточная ликвидность)", f"прошлый год + {k('LIQ','SHARE')} × (прирост депозитов − прирост кредитов)", bn(h["CD"])]
     + EFG(lambda c, p: f"={p}33+{C('LIQ','SHARE')}*(({c}30-{p}30)-({c}29-{p}29))"),
     ["CD_DEP", "Сертификаты НБУ / депозиты", "%"] + [f"={c}33/{c}30*100" for c in "DEFG"],
+    [""],
+    ["4. Передача ставки в экономику (лаг один год), п.п."],
+    ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Куда идёт"],
+    ["RR_GAP_L", "Жёсткость политики прошлого года", f"реальная ставка прошлого года − нейтральная {tk('NEUTRAL')}%", ""]
+    + EFG(lambda c, p: f"={p}22-{T('NEUTRAL')}") + ["> 0 — политика сдерживает спрос и цены"],
+    ["TR_HH", "Влияние на рост потребления домохозяйств", f"{tk('HH')} × жёсткость", ""] + EFG(lambda c, p: f"={T('HH')}*{c}38")
+    + ["B2_DEMAND (GDPE_HH) → B1 (прочие отрасли)"],
+    ["TR_GFCF", "Влияние на рост инвестиций", f"{tk('GFCF')} × жёсткость", ""] + EFG(lambda c, p: f"={T('GFCF')}*{c}38") + ["B2_DEMAND (GDPE_GFCF)"],
+    ["TR_CONSTR", "Влияние на рост строительства", f"{tk('CONSTR')} × жёсткость", ""] + EFG(lambda c, p: f"={T('CONSTR')}*{c}38") + ["B1_REAL (GVA_F)"],
+    ["TR_CPI", "Влияние на ИПЦ", f"{tk('CPI')} × жёсткость", ""] + EFG(lambda c, p: f"={T('CPI')}*{c}38") + ["B3_PRICES (CPI_M)"],
 ]
 out[f"B7_MONETARY!A1:H{len(rows)}"] = rows
 

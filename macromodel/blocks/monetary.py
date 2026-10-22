@@ -6,6 +6,11 @@ imports. Loan and deposit rates follow the NBU rate. Hryvnia loans grow with nom
 GDP and fall with the real loan rate. Hryvnia deposits keep their 2025 ratio to
 nominal GDP. Liquidity (NBU certificates of deposit) absorbs about half of the
 deposit growth that banks do not lend out.
+
+Transmission: last year's real NBU rate above its neutral level slows household
+consumption, investment and construction and lowers inflation this year. The one-year
+lag follows the usual transmission delay and keeps the sheet free of circular references
+(the rate rule reads this year's CPI).
 """
 import pandas as pd
 
@@ -24,6 +29,21 @@ CALIBRATED = {
 COEF_ROWS = [("RATE", "const"), ("RATE", "CPI"), ("RATE", "RATE_L"), ("RATE", "RES"), ("RATE", "RES_MAX"),
              ("RATE", "MONTHS"), ("LOAN", "const"), ("LOAN", "RATE_AVG"), ("DEP", "const"), ("DEP", "RATE_AVG"),
              ("LOANS_G", "const"), ("LOANS_G", "GDPN_G"), ("LOANS_G", "REAL"), ("DEPS", "GDP"), ("LIQ", "SHARE")]
+
+
+TRANSMISSION = {
+    "NEUTRAL": (3.0, "Нейтральная реальная учётная ставка, %: допущение (для развивающихся экономик обычно 2–4%)"),
+    "HH": (-0.2, "Потребление домохозяйств, п.п. роста на 1 п.п. жёсткости прошлого года. Оценка 2016–2025 дала +0,17 (неверный знак, война); "
+                 "взято по мировому опыту 0,1–0,5"),
+    "GFCF": (-0.7, "Инвестиции (ВНОК), п.п. на 1 п.п. жёсткости. Оценка МНК 2016–2025: −0,71 (ст. ошибка 0,66); мировой опыт 0,5–1,5"),
+    "CONSTR": (-0.5, "Строительство, п.п. на 1 п.п. жёсткости: слабее инвестиций, часть строек — оборона и восстановление за счёт бюджета"),
+    "CPI": (-0.25, "ИПЦ, п.п. на 1 п.п. жёсткости прошлого года (канал спроса). Оценка 2016–2025: +0,02 (ст. ошибка 0,23, связи не видно); "
+                   "мировой опыт 0,1–0,4"),
+}
+
+
+def transmission_table() -> list[dict]:
+    return [{"eq": "TR", "var": k, "coef": v, "note": n} for k, (v, n) in TRANSMISSION.items()]
 
 
 def credit_q() -> pd.DataFrame:

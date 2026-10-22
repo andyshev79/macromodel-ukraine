@@ -63,9 +63,11 @@ top.append(["DOM_DEMAND", "Рост внутреннего спроса (C + G +
 out["B2_DEMAND!A1:H16"] = top
 
 eqs = {
-    "HH": ("1,33 + 0,49 × рост реальной зарплаты", lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14"),
+    "HH": ("1,33 + 0,49 × рост реальной зарплаты + влияние ставки (B7)",
+           lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14+B7_MONETARY!{c}39"),
     "GOV": ("−1,24 + 0,17 × рост реальных расходов на оборону", lambda c, p: f"={C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15"),
-    "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор)", lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11"),
+    "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7)",
+             lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40"),
     "EXP": ("−3,1 + 0,28 × рост портов", lambda c, p: f"={C('EXP','const')}+{C('EXP','PORTS')}*({c}$12/{p}$12-1)*100"),
     "IMP": ("1,96 + 0,94 × рост внутреннего спроса", lambda c, p: f"={C('IMP','const')}+{C('IMP','DOM_DEMAND')}*{c}$16"),
     "INV": ("растут вместе с ВВП по производству", lambda c, p: f"={C('INV','GDP_P')}*{c}$11"),
