@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from macromodel import history as h
-from macromodel.loaders import nbu_files
+from macromodel.loaders import metals, nbu_files
 
 
 def test_yoy_from_mom_needs_twelve_consecutive_months():
@@ -63,3 +63,28 @@ def test_copied_year_is_dropped():
     df = pd.DataFrame({"X": vals}, index=idx)
     out = macrostat._drop_copied_years(df)
     assert sorted(set(out.index.year)) == [2011, 2013]
+
+
+def test_metals_monthly_matches_published_totals():
+    m = metals.monthly()
+    nine = m.loc["2026-01":"2026-09"].sum()
+    # Ukrmetallurgprom, January-September 2026: steel 4.43, pig iron 4.46, rolled 3.73 million t
+    assert abs(nine["STEEL_KT"] - 4430) < 15 and abs(nine["PIG_IRON_KT"] - 4460) < 15 and abs(nine["ROLLED_KT"] - 3730) < 15
+    assert abs(m.loc["2025-01":"2025-12", "PIG_IRON_KT"].sum() / 1000 - metals.annual().loc[2025, "PIG_IRON_MT"]) < 0.05
+
+
+def test_surveys_parse(tmp_path):
+    import openpyxl
+    from datetime import datetime
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "UKR"
+    ws.append([None, "Інфляційні очікування"])
+    ws.append([None, "банків", "підприємств", "домогосподарств", "фінансових аналітиків"])
+    ws.append([datetime(2026, 1, 1), 9.4, "#N/A", 10.9, 7.5])
+    ws.append([datetime(2026, 2, 1), "#N/A", 11.1, 13.5, "#N/A"])
+    ws.append([None])
+    ws.append(["*", "примітка"])
+    wb.save(tmp_path / "s.xlsx")
+    s = nbu_files.surveys_m(tmp_path / "s.xlsx")
+    assert s.loc["2026-01", "BANKS"] == 9.4 and pd.isna(s.loc["2026-02", "BANKS"]) and len(s) == 2
