@@ -17,7 +17,7 @@ import pandas as pd
 
 from macromodel.aggregate import to_quarter, to_year
 from macromodel.anchors import ANCHORS
-from macromodel.loaders import gosstat, macrostat, minfin_index, nbu, nbu_api, nbu_files, nbu_monetary, worldbank
+from macromodel.loaders import gosstat, macrostat, metals, minfin_index, nbu, nbu_api, nbu_files, nbu_monetary, worldbank
 
 BASE_YEAR = 2021  # real GDP is expressed in average prices of this year
 
@@ -513,7 +513,26 @@ def _extra_recipes() -> list[Recipe]:
     r.append(Recipe("CB_DEFSEC", "Сводный бюджет: оборона + общественный порядок и безопасность", "млн грн",
                     "MacroStat (лист Budget, Казначейство)", "Функциональные коды 0200 + 0300, из накопленных",
                     lambda d: _past(ytd_to_q(macrostat.budget_consolidated_ytd(d.macrostat)[["EXP_DEFENCE", "EXP_ORDER"]].sum(axis=1, min_count=2)))))
+    for k, nm in METALS.items():
+        r.append(Recipe(k, f"Производство: {nm}", "тыс. т", "Укрметалургпром (GMK Center, пресса); data/external/metals_m.csv",
+                        "Сумма месяцев; с 2024, вносится вручную", lambda d, k=k: m_to_q(metals.monthly()[k], "SUM")))
+    for pre, file, nm, unit in (("INFL_EXP", "surveys_price", "Инфляционные ожидания на 12 мес.", "%"),
+                                ("FX_EXP", "surveys_rate", "Ожидаемый курс через 12 мес.", "грн за USD")):
+        for k, who in SURVEY_WHO.items():
+            r.append(Recipe(f"{pre}_{k}", f"{nm}: {who}", unit, f"НБУ {file.title()}.xlsx (опросы)",
+                            "Среднее опросов квартала (группы опрашиваются с разной частотой); с 2013",
+                            lambda d, f=file, k=k: _q_mean(nbu_files.surveys_m(d.nbu_file(f))[k])))
     return r
+
+
+METALS = {"STEEL_KT": "сталь", "PIG_IRON_KT": "чугун", "ROLLED_KT": "прокат"}
+SURVEY_WHO = {"BANKS": "банки", "BUSINESS": "предприятия", "HH": "домохозяйства", "ANALYSTS": "финансовые аналитики"}
+
+
+def _q_mean(s: pd.Series) -> pd.Series:
+    """Mean of whatever months of the quarter have a value (for surveys run once a quarter)."""
+    s = s.dropna()
+    return q_label(s.groupby(s.index.asfreq("Q")).mean())
 
 
 SERIES_RECIPES = _series_recipes() + _extra_recipes()
@@ -578,7 +597,7 @@ def annual_agg(code: str) -> str:
         return a.agg
     if code in STOCKS or (code.startswith(("CPI_", "PPI_", "CORE_CPI")) and code.endswith("_YOY")):
         return "END"
-    if code.endswith(("_NOM", "_USD", "_UAH")) or code.startswith(("CB_", "BUDGET_", "COMP_EMPL")):
+    if code.endswith(("_NOM", "_USD", "_UAH", "_KT")) or code.startswith(("CB_", "BUDGET_", "COMP_EMPL")):
         return "SUM" if not code.startswith("PX_") else "AVG"
     return "AVG"
 
@@ -622,7 +641,19 @@ ANNUAL_ONLY = {
 for _k, (_unit, _old, _new) in gosstat.PRODUCTS.items():
     ANNUAL_ONLY[f"PROD_{_k}"] = (f"Производство: {_k.rsplit('_', 1)[0].lower().replace('_', ' ')}", _unit,
                                  "Госстат (stat.gov.ua)", f"«{_old}» до 2010" + (f", «{_new}» с 2011" if _new else "; после 2010 конфиденциально"),
-                                 lambda d, k=_k: gosstat.products_y(gosstat.download(d.cache, refresh=d.refresh_from is not None))[k])
+                                 lambda d, k=_k: _prod_y(d, k))
+
+
+def _prod_y(d, k: str) -> pd.Series:
+    """Gosstat output; steel, pig iron and rolled products from 2016 from Ukrmetallurgprom."""
+    s = gosstat.products_y(gosstat.download(d.cache, refresh=d.refresh_from is not None))[k]
+    m = metals.annual()
+    return s.combine_first(m[k]) if k in m else s
+
+
+for _k in metals.annual().columns:
+    _n, _u, _src, _meth, _fn = ANNUAL_ONLY[f"PROD_{_k}"]
+    ANNUAL_ONLY[f"PROD_{_k}"] = (_n, _u, _src + "; с 2016 Укрметалургпром (GMK Center)", _meth, _fn)
 
 
 def _annual_real_gdp(nom_y: pd.Series, real_q_y: pd.Series, idx: pd.Series) -> pd.Series:

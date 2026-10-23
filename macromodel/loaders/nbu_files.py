@@ -8,6 +8,8 @@
 - macro/Wages_m.xlsx, Wages_y.xlsx: average wage monthly from 2010 and by year from
   1995; the API starts in 2013.
 - macro/Number_m.xlsx: average number of staff employees from 2010, through the war years.
+- macro/Surveys_price.xlsx, Surveys_rate.xlsx: 12-month-ahead inflation and UAH/USD
+  expectations of banks, businesses, households and financial analysts, from 2013.
 
 The files are replaced in place at the same address, so each is downloaded to the cache
 and read by row labels, not positions.
@@ -22,7 +24,8 @@ import requests
 
 BASE = "https://bank.gov.ua/files"
 FILES = {"trade_m": "ES/Trade_m.xlsx", "gdp_y": "macro/GDP_y.xlsx", "ppi_q": "macro/PPI_q.xlsx",
-         "wages_m": "macro/Wages_m.xlsx", "wages_y": "macro/Wages_y.xlsx", "staff_m": "macro/Number_m.xlsx"}
+         "wages_m": "macro/Wages_m.xlsx", "wages_y": "macro/Wages_y.xlsx", "staff_m": "macro/Number_m.xlsx",
+         "surveys_price": "macro/Surveys_price.xlsx", "surveys_rate": "macro/Surveys_rate.xlsx"}
 
 MONTHS_UA = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"]  # first three letters
 
@@ -175,3 +178,22 @@ def wages_y(p: Path) -> pd.Series:
             if j < len(r) and isinstance(r[j], (int, float)):
                 out[y] = float(r[j])
     return pd.Series(out, dtype=float).sort_index()
+
+
+# column headers of the Surveys_* sheet "UKR"
+SURVEY_GROUPS = {"BANKS": "банків", "BUSINESS": "підприємств", "HH": "домогосподарств", "ANALYSTS": "фінансових аналітиків"}
+
+
+def surveys_m(p: Path) -> pd.DataFrame:
+    """Expectations 12 months ahead by respondent group, one column per group, monthly.
+    Each group is surveyed at its own frequency (households monthly, banks and businesses
+    quarterly, analysts in most months); months without a survey hold '#N/A' and stay empty."""
+    rows = _rows(p, "UKR")
+    hi = next(i for i, r in enumerate(rows) if any(isinstance(v, str) and v.strip() == "банків" for v in r))
+    cols = {k: next(j for j, v in enumerate(rows[hi]) if isinstance(v, str) and v.strip() == lab) for k, lab in SURVEY_GROUPS.items()}
+    out = {}
+    for r in rows[hi + 1:]:
+        if not isinstance(r[0], datetime):
+            continue
+        out[pd.Period(r[0], "M")] = {k: float(r[j]) if isinstance(r[j], (int, float)) else None for k, j in cols.items()}
+    return pd.DataFrame.from_dict(out, orient="index", dtype=float).sort_index()
