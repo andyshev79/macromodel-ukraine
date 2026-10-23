@@ -91,10 +91,14 @@ COEF_ROWS = [
 
 
 def coef_table() -> list[dict]:
+    from macromodel import quarterly
+
     est = estimate()
     rows = []
     for c, var in COEF_ROWS:
-        if (c, var) in CALIBRATED:
+        if f"GDPE_{c}" in quarterly.USED:
+            rows += quarterly.coef_rows(f"GDPE_{c}", [(f"GDPE_{c}", var)])
+        elif (c, var) in CALIBRATED:
             v, note = CALIBRATED[(c, var)]
             rows.append({"eq": f"GDPE_{c}", "var": var, "coef": v, "se": None, "r2": None, "n": None,
                          "method": "калибровка", "note": note})

@@ -79,10 +79,14 @@ def estimate(first="2016", last="2025") -> dict:
 
 
 def coef_table() -> list[dict]:
+    from macromodel import quarterly
+
     est = estimate()
     rows = []
     for eq, var in COEF_ROWS:
-        if (eq, var) in CALIBRATED:
+        if eq in quarterly.USED:
+            rows += quarterly.coef_rows(eq, [(eq, var)])
+        elif (eq, var) in CALIBRATED:
             v, note = CALIBRATED[(eq, var)]
             if (eq, var) == ("DEPS", "GDP"):
                 v = round(float(annual().loc["2025", "DEPS_GDP"]), 1)

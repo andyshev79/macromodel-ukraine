@@ -51,11 +51,16 @@ def estimate(first="2016", last="2025") -> dict:
 
 
 def coef_table() -> list[dict]:
+    from macromodel import quarterly
+
     est = estimate()
-    return [{"eq": y, "var": v, "coef": round(float(est[y]["coef"][v]), 2), "se": round(float(est[y]["se"][v]), 2),
+    rows = [{"eq": y, "var": v, "coef": round(float(est[y]["coef"][v]), 2), "se": round(float(est[y]["se"][v]), 2),
              "r2": round(float(est[y]["r2"]), 2), "n": est[y]["n"],
              "method": "оценка МНК 2016–2025, годовые" + (", дамми 2022" if "WAR22" in EQUATIONS[y] else ""),
              "note": ""} for y, v in COEF_ROWS]
+    q = {(r["eq"], r["var"]): r for eq in quarterly.USED & set(EQUATIONS)
+         for r in quarterly.coef_rows(eq, [(y, v) for y, v in COEF_ROWS if y == eq])}
+    return [q.get((r["eq"], r["var"]), r) for r in rows]
 
 
 if __name__ == "__main__":
