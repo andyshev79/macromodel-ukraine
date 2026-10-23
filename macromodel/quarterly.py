@@ -1,8 +1,11 @@
 """Quarterly re-estimation of equations whose drivers exist by quarter (y/y growth rates).
 
-Ten annual points are too few, so the same relations are fitted on 2016Q1-2025Q4
-quarterly y/y data: about 35 points after dropping the invasion quarters 2022Q1-2023Q1
-(the y/y base effect of 2022 lasts into 2023Q1). Overlapping y/y rates are autocorrelated,
+Ten annual points are too few, so the same relations are fitted on 2011Q1-2025Q4
+quarterly y/y data from the long history (data/history/long): about 55 points after
+dropping the invasion quarters 2022Q1-2023Q1 (the y/y base effect of 2022 lasts into
+2023Q1). The 2014-2015 crisis stays in the sample; CPI gets a second exchange-rate term
+above FX_THR devaluation, because pass-through in that crisis was far stronger than in
+calm years. Overlapping y/y rates are autocorrelated,
 so t-statistics use Newey-West errors with 4 lags.
 
 Out-of-sample check, comparable with macromodel.quality: estimate on quarters before year t,
@@ -18,14 +21,15 @@ import pandas as pd
 from macromodel.blocks.demand import cpi_index_q, real_levels_q
 from macromodel.blocks.real_sector import quarterly
 
-FIRST, LAST = "2016Q1", "2025Q4"
+FIRST, LAST = "2011Q1", "2025Q4"
+FX_THR = 15  # devaluation, % y/y, above which pass-through to CPI rises (2014–2015 crisis)
 WAR = ["2022Q1", "2022Q2", "2022Q3", "2022Q4", "2023Q1"]
 TEST_YEARS = ["2023", "2024", "2025"]
-METHOD = "оценка МНК 2016–2025, квартальные г/г без 2022Q1–2023Q1, ошибки Ньюи–Уэста"
+METHOD = "оценка МНК 2011–2025, квартальные г/г без 2022Q1–2023Q1, ошибки Ньюи–Уэста"
 
 # Equation id as on COEFS/MODEL_QUALITY -> (dependent, drivers); driver names as in the annual block
 EQUATIONS = {
-    "CPI": ("CPI", ["FX", "WAGE"]),
+    "CPI": ("CPI", ["FX", "FX_BIG", "WAGE"]),
     "PPI": ("PPI", ["CPI"]),
     "DEFL": ("DEFL", ["CPI", "PPI"]),
     "RATE": ("RATE", ["CPI", "RATE_L1"]),
@@ -35,13 +39,39 @@ EQUATIONS = {
     "GDPE_GOV": ("GOV", ["REAL_DEF"]),
     "GDPE_IMP": ("IMP", ["DOM_DEMAND"]),
 }
-INERTIA = ("CPI", ["FX", "WAGE", "CPI_L1"])
-USED = {"CPI", "LOAN", "GDPE_HH"}
+INERTIA = ("CPI", ["FX", "FX_BIG", "WAGE", "CPI_L1"])
+USED = {"CPI", "LOAN", "GDPE_HH", "GDPE_IMP"}
 
 
-def data() -> pd.DataFrame:
-    d = quarterly()
+def long_quarterly() -> pd.DataFrame:
+    """Quarterly history from 2005 (data/history/long), same codes as data/history."""
+    from macromodel.blocks.real_sector import HIST
+    s = pd.read_csv(HIST / "long" / "series_q.csv", index_col=0)
+    a = pd.read_csv(HIST / "long" / "anchors_q.csv", index_col=0)
+    return pd.concat([s, a]).T.apply(pd.to_numeric, errors="coerce")
+
+
+def data(long: bool = True) -> pd.DataFrame:
     yoy = lambda s: (s / s.shift(4) - 1) * 100
+    if long:
+        d = long_quarterly()
+        cpi = (1 + d["CPI_QOQ"] / 100).cumprod()
+        w = {c: d[f"GDPE_{n}_NOM"].shift(4) for c, n in [("HH", "HH"), ("GOV", "GEN_GOV"), ("GFCF", "GFCF")]}
+        g = {c: d[f"GDPE_{n}_YOY"] for c, n in [("HH", "HH"), ("GOV", "GEN_GOV"), ("GFCF", "GFCF")]}
+        dom = sum(w[c] * g[c] for c in w) / sum(w.values())
+        q = pd.DataFrame({
+            "CPI": d["CPI_YOY"], "PPI": d["PPI_YOY"], "DEFL": yoy(d["GDP_NOM"] / d["GDP_REAL"]),
+            "FX": yoy(d["FX_AVG"]), "WAGE": yoy(d["WAGE_NOM"]),
+            "RATE": d["NBU_RATE"], "RATE_AVG": d["NBU_RATE"], "LOAN": d["LOAN_RATE"], "DEP": d["DEP_RATE"],
+            "HH": d["GDPE_HH_YOY"], "GOV": d["GDPE_GEN_GOV_YOY"], "IMP": d["GDPE_IGS_YOY"], "DOM_DEMAND": dom,
+            "REAL_WAGE": yoy(d["WAGE_NOM"] / cpi),
+            "REAL_DEF": yoy(d["BUDGET_DEFENCE"] / (d["GDP_NOM"] / d["GDP_REAL"])),
+        })
+        q["CPI_L1"] = q["CPI"].shift()
+        q["RATE_L1"] = q["RATE"].shift()
+        q["FX_BIG"] = (q["FX"] - FX_THR).clip(lower=0)
+        return q
+    d = quarterly()
     lv = real_levels_q()
     q = pd.DataFrame({
         "CPI": d["CPI_YOY"], "PPI": d["PPI_YOY"], "DEFL": yoy(d["DEFL"]),
@@ -54,6 +84,7 @@ def data() -> pd.DataFrame:
     })
     q["CPI_L1"] = q["CPI"].shift()
     q["RATE_L1"] = q["RATE"].shift()
+    q["FX_BIG"] = (q["FX"] - FX_THR).clip(lower=0)
     return q
 
 
