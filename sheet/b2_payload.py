@@ -63,8 +63,9 @@ dom = [f"=({sumif(c + '$10-1', 32)}*(1+{c}20/100)+{sumif(c + '$10-1', 33)}*(1+{c
 top.append(["DOM_DEMAND", "Рост внутреннего спроса (C + G + I)", "%", round(float(x["DOM_DEMAND"]), 1)] + dom + ["взвешенный рост компонентов"])
 out["B2_DEMAND!A1:H16"] = top
 
+kv = lambda c, v: f"{next(r['coef'] for r in coefs if (r['eq'], r['var']) == (f'GDPE_{c}', v)):.2f}".replace(".", ",").replace("-", "−")
 eqs = {
-    "HH": ("1,33 + 0,49 × рост реальной зарплаты + влияние ставки (B7)",
+    "HH": (f"{kv('HH', 'const')} + {kv('HH', 'REAL_WAGE')} × рост реальной зарплаты + влияние ставки (B7)",
            lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14+B7_MONETARY!{c}39"),
     "GOV": ("−1,24 + 0,17 × рост реальных расходов на оборону", lambda c, p: f"={C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15"),
     "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7)",

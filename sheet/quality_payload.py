@@ -8,6 +8,7 @@ import json
 import sys
 from datetime import date
 
+from macromodel import quarterly
 from macromodel.quality import FIRST, LAST, META, NOTES, TEST_YEARS, report
 
 HEADER_ROW = 7
@@ -64,6 +65,17 @@ for eq, r in rep.items():
                 + [r1(r["oos"].get(y, float("nan"))) for y in TEST_YEARS]
                 + [r1(r["mae"]), r1(r["bench"]), r2(r["ratio"]), r1(r["bias"]), r["verdict"], comment(eq, r)])
 out[f"MODEL_QUALITY!A{HEADER_ROW}:Q{last}"] = rows
+
+# Quarterly re-estimation of the same relation, where drivers exist by quarter
+qe = quarterly.estimate()
+qrows = [["Квартальная: n", "R²", "Мин. |t| (Ньюи–Уэст)", "Ср. абс. ошибка", "В модели"]]
+for eq in rep:
+    if eq in qe:
+        r = qe[eq]
+        qrows.append([r["n"], r2(r["r2"]), r1(r["min_t"]), r1(r["mae"]), "квартальная" if eq in quarterly.USED else "годовая"])
+    else:
+        qrows.append(["", "", "", "", "годовая"])
+out[f"MODEL_QUALITY!R{HEADER_ROW}:V{last}"] = qrows
 
 fit_row = last + 3
 fit = [["Факт и модель по годам (оценка на всех годах; эти коэффициенты стоят в COEFS)"],
