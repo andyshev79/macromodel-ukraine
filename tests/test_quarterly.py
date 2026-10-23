@@ -21,3 +21,11 @@ def test_blocks_take_quarterly_rows():
     rows = prices.coef_table() + demand.coef_table() + monetary.coef_table()
     used = {r["eq"] for r in rows if r["method"] == quarterly.METHOD}
     assert used == quarterly.USED
+
+
+def test_shock_estimates_in_range():
+    from macromodel.blocks.shocks import estimated
+    e = estimated()
+    assert 0.05 < e["TARIFF_W"][0] < 0.25 and e["TARIFF_W"][0] / e["TARIFF_W"][1] >= 1.96
+    assert 0.05 < e["MET_C"][0] < 0.6 and e["MET_C"][0] / e["MET_C"][1] >= 1.96
+    assert 0.03 < e["MET_X"][0] < 0.3
