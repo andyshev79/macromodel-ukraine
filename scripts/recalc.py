@@ -24,7 +24,7 @@ from macromodel.anchors import ANCHORS
 
 OUT = ROOT / "data" / "recalc"
 BLOCKS = ["b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"]
-TEXT_SHEETS = ("B1_REAL", "B2_DEMAND", "B3_PRICES", "B7_MONETARY")  # equation texts follow the estimates
+TEXT_SHEETS = ("B1_REAL", "B2_DEMAND", "B3_PRICES", "B4_LABOUR", "B7_MONETARY")  # equation texts follow the estimates
 FIRST_ROW, FIRST_Q, LAST_FACT = 5, "2015Q1", "2026Q2"  # ANCHORS layout: row 5 = first anchor, H = 2015Q1
 FORMULA_ROWS = {"DEFL", "TRADE_BAL", "FIN_GAP_USD"}
 
@@ -61,7 +61,7 @@ def payload(name: str, *args) -> dict:
 def build() -> dict:
     out, written = {}, set()
     for b in BLOCKS:
-        for rng, vals in payload(b).items():
+        for rng, vals in payload(b, "--coefs").items():
             written |= set(cells(rng, vals))
             if rng.startswith("COEFS!"):
                 out[rng] = vals

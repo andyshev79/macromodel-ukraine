@@ -13,7 +13,7 @@ Only estimated equations are checked; calibrated coefficients have no sample to 
 import numpy as np
 import pandas as pd
 
-from macromodel.blocks import demand, external, labour, monetary, prices, real_sector
+from macromodel.blocks import demand, external, labour, monetary, prices, real_sector, wages
 from macromodel.blocks.real_sector import annual_growth, ols
 
 FIRST, LAST = "2016", "2025"
@@ -37,6 +37,7 @@ META = {
     "PPI": ("B3", "ИЦП: от ИПЦ и цены газа", "% г/г"),
     "DEFL": ("B3", "Дефлятор ВВП: от ИПЦ и ИЦП", "% г/г"),
     "U": ("B4", "Изменение безработицы: закон Оукена", "п.п."),
+    "W": ("B4", "Номинальная зарплата: ИПЦ, минимальная, бюджет, безработица", "% г/г"),
     "EXP_P": ("B5", "Цены экспорта в USD: от пшеницы и стали", "% г/г"),
     "IMP_P": ("B5", "Цены импорта в USD: от газа", "% г/г"),
     "RATE": ("B7", "Учётная ставка НБУ на конец года: от ИПЦ", "%"),
@@ -49,6 +50,7 @@ META = {
 NOTES = {
     "EXP_P": "В модели константа откалибрована (2 вместо оценки): проверяется оценённая версия",
     "U": "Безработица 2022–2025 — оценки НБУ",
+    "W": "Без 2022; безработица 2022–2025 — оценки НБУ. Короткая выборка (9 лет): ретропрогноз 2023 на 6 годах",
     "GVA_OTHER": "В модели наклон к потреблению из этой оценки, константа тоже",
 }
 
@@ -73,6 +75,7 @@ def datasets() -> dict:
     for y, regs in prices.EQUATIONS.items():
         add(y, a3, y, regs)
     add("U", labour.annual(), "DU", ["GDP"])
+    add("W", wages.annual().drop(index=wages.SKIP), "WAGE", wages.REGS)
     a5 = external.annual()
     for y, regs in external.EQUATIONS.items():
         add(y, a5, y, regs)

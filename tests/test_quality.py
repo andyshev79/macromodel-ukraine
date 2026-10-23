@@ -4,8 +4,8 @@ from macromodel.quality import META, TEST_YEARS, report
 def test_report_covers_estimated_equations():
     rep = report()
     assert set(rep) == set(META)
-    for r in rep.values():
-        assert r["n"] == 10 and set(r["oos"]) == set(TEST_YEARS)
+    for eq, r in rep.items():
+        assert r["n"] == (9 if eq == "W" else 10) and set(r["oos"]) == set(TEST_YEARS)
         assert r["verdict"] in {"надёжно", "приемлемо", "слабо", "только среднее"}
 
 
