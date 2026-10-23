@@ -37,3 +37,29 @@ def test_manufacturing_quarterly_rows():
     hh = rows[("GVA_C", "HH")]
     assert 0 < hh["coef"] < 1 and hh["period"].startswith("2013")
     assert ("GVA_C", "EA_GDP") not in rows
+
+
+def test_wage_factors():
+    from macromodel.blocks import wages
+    r = wages.estimate()
+    c, t = r["coef"], {k: r["coef"][k] / r["se"][k] for k in r["coef"]}
+    assert 0.1 < c["MINW"] < 0.3 and t["MINW"] >= 1.96
+    assert 0.2 < c["PUB"] < 1 and t["PUB"] >= 1.96
+    assert c["DU"] < 0 and t["DU"] <= -1.96
+    assert c["CPI_L"] < 0.5  # weak indexation: no wage-price spiral
+    assert wages.min_wage()["2026"] == 8647
+    rows = [k for k in wages.ROW]
+    assert wages.ROW[rows[-1]] - wages.COEF_FIRST == len(rows) - 1
+
+
+def test_b4_wage_links():
+    import json, os, subprocess, sys
+    env = {**os.environ, "PYTHONPATH": "."}
+    out = json.loads(subprocess.run([sys.executable, "sheet/b4_payload.py"], capture_output=True, text=True, check=True, env=env).stdout)
+    assert out["B3_PRICES!E12:H12"][0][0] == "=B4_LABOUR!E43"
+    assert out["B2_DEMAND!E14:H14"][0][0] == "=B4_LABOUR!E46"
+    rows = out[next(k for k in out if k.startswith("B4_LABOUR"))]
+    assert rows[41][0] == "NW_F" and rows[28][4] == "=E42"
+    assert rows[42][0] == "WAGE_ECON" and rows[45][0] == "INCOME"
+    lean = json.loads(subprocess.run([sys.executable, "sheet/b4_payload.py", "--coefs"], capture_output=True, text=True, check=True, env=env).stdout)
+    assert not any(k.startswith("SCENARIOS") for k in lean)
