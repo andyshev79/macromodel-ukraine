@@ -12,6 +12,8 @@ Quarter columns C:L of SCENARIOS are 2026Q3..2028Q4, the same order as ANCHORS B
 import json
 import sys
 
+from macromodel.blocks.shocks import SHOCK_ROW, TARIFF_ROW
+
 QUARTERS = [f"{y}Q{q}" for y in (2026, 2027, 2028) for q in (1, 2, 3, 4)][2:]
 QCOLS = "CDEFGHIJKL"
 HEAD = 38
@@ -40,7 +42,7 @@ rows = [
     [""],
     ["Ближайшие кварталы: свежие данные и оценки НБУ (для всех сценариев)"],
     ["Рост реального ВВП", "% г/г"] + blank,
-    ["ИПЦ", "% г/г, среднее за квартал", 10] + blank[1:],
+    ["ИПЦ", "% г/г, среднее за квартал", 10, 12.3] + blank[2:],  # 2026Q4: Andrey's estimate
     ["Курс UAH/USD, средний", "грн за 1 USD", 44.69, 44.91] + blank[2:],
     ["Учётная ставка НБУ", "%, конец квартала", 16, 16] + blank[2:],
 ]
@@ -71,7 +73,13 @@ for start, (y, b5, actual) in {"BB": (2026, "E", "-SUM($AZ29:$BA29)"), "BD": (20
 # near-term overrides in ANCHORS (copied right over BB:BK)
 o = lambda r: ov("BB", r)
 out["ANCHORS!BB5"] = [[f"=IF({o(R['GDP'])}<>\"\";AX5*(1+{o(R['GDP'])}/100);BB6)"]]
-out["ANCHORS!BB10"] = [[f"=IF({o(R['CPI'])}<>\"\";{o(R['CPI'])};INDEX(B3_PRICES!$E$19:$G$19;MATCH(BB$2;B3_PRICES!$E$10:$G$10;0)))"]]
+# CPI: given quarter, else last quarter moving to the B3 model level (inertia) plus utility tariff hikes
+# of the last four quarters (sheet.shocks_payload); tp strips last quarter's tariff part before the step
+tar = lambda first, width: f"COEFS!$E${SHOCK_ROW['TARIFF_W']}*SUM(OFFSET(SCENARIOS!$C${TARIFF_ROW};0;{first};1;{width}))"
+out["ANCHORS!BB10"] = [[f"=LET(c;COLUMN()-COLUMN($BB$1);o;{o(R['CPI'])};"
+                        f"m;INDEX(B3_PRICES!$E$19:$G$19;MATCH(BB$2;B3_PRICES!$E$10:$G$10;0));"
+                        f"t;{tar('MAX(0;c-3)', 'MIN(4;c+1)')};tp;IF(c=0;0;{tar('MAX(0;c-4)', 'MIN(4;c)')});p;BA10-tp;"
+                        f"IF(o<>\"\";o;p+COEFS!$E${SHOCK_ROW['CPI_SPEED']}*(m-p)+t))"]]
 out["ANCHORS!BB12"] = [[f"=IF({o(R['FX'])}<>\"\";{o(R['FX'])};BA12)"]]
 out["ANCHORS!BD12"] = [[f"=IF({ov('BD', R['FX'])}<>\"\";{ov('BD', R['FX'])};AZ12*(1+INDEX(B3_PRICES!$E$11:$G$11;MATCH(BD$2;B3_PRICES!$E$10:$G$10;0))/100))"]]
 out["ANCHORS!BB14"] = [[f"=IF({o(R['RATE'])}<>\"\";{o(R['RATE'])};BA14)"]]

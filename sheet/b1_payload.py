@@ -8,6 +8,7 @@ import sys
 import pandas as pd
 
 from macromodel.blocks.real_sector import SECTORS, annual_growth, coef_table, real_levels_q
+from macromodel.blocks.shocks import SHOCK_ROW
 
 QUARTERS = [f"{y}Q{q}" for y in range(2015, 2029) for q in range(1, 5)]
 
@@ -63,14 +64,18 @@ drv = [
 for code, name, unit, v25, srow, src in drv:
     text.append([code, name, unit, v25] + [f"=SCENARIOS!{c}{srow}" for c in "LMN"] + [src])
 out["B1_REAL!A1:H15"] = text
+# metallurgy utilisation (sheet.shocks_payload); MAX(;1) keeps a full stop finite
+out["B1_REAL!A16:H16"] = [["MET", "Металлургия: загрузка мощностей", "% от 2025", 100,
+                           "=SCENARIOS!L63", "=SCENARIOS!M63", "=SCENARIOS!N63", "SCENARIOS (отраслевые шоки)"]]
+MET = lambda s, c, p: f"+COEFS!$E${SHOCK_ROW['MET_' + s]}*(MAX({c}$16;1)/MAX({p}$16;1)-1)*100"
 
 g = annual_growth(real_levels_q())
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
-    "B": ("−2,2 + 0,11 × рост портов + 0,3 × рост мощности",
-          lambda c, p: f"={C('B','const')}+{C('B','PORTS')}*({c}$12/{p}$12-1)*100+{C('B','CAP')}*({c}$13/{p}$13-1)*100"),
-    "C": ("2,66 + 0,59 × ВВП еврозоны + 0,3 × рост мощности",
-          lambda c, p: f"={C('C','const')}+{C('C','EA_GDP')}*{c}$14+{C('C','CAP')}*({c}$13/{p}$13-1)*100"),
+    "B": ("−2,2 + 0,11 × рост портов + 0,3 × рост мощности + 0,2 × изменение загрузки металлургии",
+          lambda c, p: f"={C('B','const')}+{C('B','PORTS')}*({c}$12/{p}$12-1)*100+{C('B','CAP')}*({c}$13/{p}$13-1)*100{MET('B', c, p)}"),
+    "C": ("2,66 + 0,59 × ВВП еврозоны + 0,3 × рост мощности + 0,12 × изменение загрузки металлургии",
+          lambda c, p: f"={C('C','const')}+{C('C','EA_GDP')}*{c}$14+{C('C','CAP')}*({c}$13/{p}$13-1)*100{MET('C', c, p)}"),
     "D": ("рост мощности (эластичность 1)", lambda c, p: f"={C('D','const')}+{C('D','CAP')}*({c}$13/{p}$13-1)*100"),
     "F": ("тренд 2024–2025 + влияние ставки (B7)", lambda c, p: f"={C('F','const')}+B7_MONETARY!{c}41"),
     "G": ("константа (до связки с потреблением B2)", lambda c, p: f"={C('G','const')}"),
