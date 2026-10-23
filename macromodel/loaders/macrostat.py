@@ -164,3 +164,130 @@ def debt_schedule_y(path: Path) -> pd.DataFrame:
     df = pd.DataFrame(out)
     df.index.name = "year"
     return df.sort_index()
+
+
+def _monthly_columns(path: Path, sheet: str, header_row: int, first_data_row: int, columns: dict[str, str]) -> pd.DataFrame:
+    """Monthly table with year in column A and month in column C; `columns` maps a key to
+    the start of its header text in row `header_row`."""
+    rows = _rows(path, sheet)
+    cols = {k: _col(rows[header_row], text) for k, text in columns.items()}
+    out = {}
+    for r in rows[first_data_row:]:
+        y, mo = _num(_cell(r, 0)), _num(_cell(r, 2))
+        if not (y and mo):
+            continue
+        vals = {k: _num(_cell(r, j)) for k, j in cols.items()}
+        if any(v is not None for v in vals.values()):
+            out[pd.Period(f"{int(y)}-{int(mo):02d}", "M")] = vals
+    return pd.DataFrame.from_dict(out, orient="index").sort_index()
+
+
+# CPI sheet: monthly indices to the previous month (101.8 = +1.8%), from 2010.
+CPI_ITEMS = {
+    "UTIL": "Житло, вода, електроенергія, газ",
+    "ELEC": "Електроенергія",
+    "GAS": "Природний газ",
+    "HEAT": "Гаряча вода, опалення",
+    "WATER": "Водопостачання",
+    "FOOD": "Продукти харчування та безалкогольні",
+    "ALC_TOB": "Алкогольні напої, тютюнові",
+    "TRANSPORT": "Транспорт",
+    "FUEL": "Паливо та мастила",
+    "HEALTH": "Охорона здоров",
+}
+
+
+def cpi_items_mom(path: Path) -> pd.DataFrame:
+    """CPI components, index to the previous month (=100), sheet CPI."""
+    return _monthly_columns(path, "CPI", 0, 4, CPI_ITEMS)
+
+
+def cpi_extra_yoy(path: Path) -> pd.DataFrame:
+    """Core CPI and PPI, y/y index (=100), sheet CPI; PPI here starts before the API (2013)."""
+    return _monthly_columns(path, "CPI", 0, 4, {"CORE": "Базовий індекс y/y", "PPI": "Ціни виробників y/y"})
+
+
+def industry_yoy_m(path: Path) -> pd.Series:
+    """Industrial production index, % y/y (=100), sheet SectorIndexes M, from 2010."""
+    rows = _rows(path, "SectorIndexes M")
+    start = _col(rows[1], "Industrial production")
+    c = start + [str(v).strip() if v else "" for v in rows[2][start:start + 3]].index("y/y")
+    out = {}
+    for r in rows[3:]:
+        d, v = _cell(r, 3), _num(_cell(r, c))
+        if isinstance(d, datetime) and v is not None:
+            out[pd.Period(d, "M")] = v
+    return pd.Series(out, dtype=float).sort_index()
+
+
+# Budget sheet: consolidated budget, cumulative from January, UAH million, from 2011.
+# key -> (block title prefix in column A, row label prefix in column B or budget code)
+BUDGET_ROWS = {
+    "REV_TOTAL": ("Доходи Зведеного", "Разом доходів"),
+    "REV_PIT": ("Доходи Зведеного", 11010000),
+    "REV_CIT": ("Доходи Зведеного", 11020000),
+    "REV_VAT_DOM": ("Доходи Зведеного", 14060000),
+    "REV_VAT_IMP": ("Доходи Зведеного", 14070000),
+    "REV_EXC_DOM": ("Доходи Зведеного", 14020000),
+    "REV_EXC_IMP": ("Доходи Зведеного", 14030000),
+    "REV_GRANTS": ("Доходи Зведеного", 42000000),
+    "EXP_TOTAL": ("Видатки Зведеного", "Усього видатків"),
+    "EXP_DEFENCE": ("Видатки Зведеного", 200),
+    "EXP_ORDER": ("Видатки Зведеного", 300),
+    "EXP_ECON": ("Видатки Зведеного", 400),
+    "EXP_HEALTH": ("Видатки Зведеного", 700),
+    "EXP_EDU": ("Видатки Зведеного", 900),
+    "EXP_SOCIAL": ("Видатки Зведеного", 1000),
+    "EXP_WAGES": ("Видатки Зведеного", 2100),
+    "EXP_INTEREST": ("Видатки Зведеного", 2400),
+    "EXP_CAPITAL": ("Видатки Зведеного", 3000),
+    "FIN_TOTAL": ("Фінансування Зведеного", "Фінансування (дефіцит"),
+    "FIN_DOMESTIC": ("Фінансування Зведеного", 200000),
+    "FIN_EXTERNAL": ("Фінансування Зведеного", 300000),
+}
+
+
+def budget_consolidated_ytd(path: Path) -> pd.DataFrame:
+    """Consolidated budget items, cumulative from January, UAH million, monthly (sheet Budget).
+
+    Rows are found inside their block (revenue, expenditure, financing) by budget code in
+    column C or by label start in column B, so inserted rows do not shift them."""
+    rows = _rows(path, "Budget")
+    head = rows[0]
+    months = {j: pd.Period(h, "M") for j, h in enumerate(head) if isinstance(h, datetime)}
+    blocks = [i for i, r in enumerate(rows) if r and isinstance(r[0], str) and "кумулятивно" in r[0]]
+    out = {}
+    for key, (block, ident) in BUDGET_ROWS.items():
+        b = next(i for i in blocks if rows[i][0].startswith(block))
+        end = next((i for i in blocks if i > b), len(rows))
+        i = next(i for i in range(b + 1, end)
+                 if (isinstance(ident, int) and _num(_cell(rows[i], 2)) == ident)
+                 or (isinstance(ident, str) and isinstance(_cell(rows[i], 1), str) and rows[i][1].strip().startswith(ident)))
+        out[key] = {p: _num(_cell(rows[i], j)) for j, p in months.items()}
+    return pd.DataFrame(out).sort_index()
+
+
+AGRO_PRICES = {
+    "WHEAT": "Ukraine Wheat 11.5% FOB",
+    "BARLEY": "Ukraine Barley FOB",
+    "SUNOIL": "Ukraine Crude Sunoil FOB",
+    "SOY": "Ukraine Soybeans FOB",
+}
+
+
+def agro_export_prices_m(path: Path) -> pd.DataFrame:
+    """Black Sea FOB export prices, USD per tonne, monthly (sheet AGROTrends, last price)."""
+    rows = _rows(path, "AGROTrends")
+    cols = {k: _col(rows[0], text) for k, text in AGRO_PRICES.items()}
+    out = {}
+    for r in rows[3:]:
+        d = _cell(r, 0)
+        if isinstance(d, str):
+            try:
+                d = datetime.strptime(d.strip(), "%d.%m.%Y")
+            except ValueError:
+                continue
+        if not isinstance(d, datetime):
+            continue
+        out[pd.Period(d, "M")] = {k: _num(_cell(r, j)) for k, j in cols.items()}
+    return pd.DataFrame.from_dict(out, orient="index").sort_index()
