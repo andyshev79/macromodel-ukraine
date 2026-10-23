@@ -3,7 +3,8 @@
 Tariffs (SCENARIOS row 57, by quarter, all scenarios): CPI y/y rises by the weight of
 housing and utilities in CPI times the hike, in the quarter of the hike and the next three.
 Metallurgy (SCENARIOS row 63, utilisation in % of 2025, by year and scenario): the change
-in utilisation moves manufacturing, mining and real exports by the metallurgy shares below.
+in utilisation, in points of 2025 output, moves manufacturing, mining and real exports by the
+metallurgy elasticities below (a restart from 15 to 50 adds 35% of 2025 output, not +233%).
 CPI_SPEED sets inflation inertia: each quarter CPI closes this share of the gap between the
 previous quarter and the annual B3 model.
 TARIFF_W, MET_C and MET_X now come from the long history (estimated() below); MET_B stays

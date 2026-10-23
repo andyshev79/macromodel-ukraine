@@ -8,7 +8,7 @@ import sys
 import pandas as pd
 
 from macromodel.blocks.real_sector import SECTORS, annual_growth, coef_table, real_levels_q
-from macromodel.blocks.shocks import SHOCK_ROW
+from macromodel.blocks.shocks import SHOCK_ROW, SHOCKS, estimated
 
 QUARTERS = [f"{y}Q{q}" for y in range(2015, 2029) for q in range(1, 5)]
 
@@ -35,12 +35,18 @@ def C(s, v):
     return f"COEFS!$E${crow[(f'GVA_{s}', v)]}"
 
 
+cval = {(r["eq"], r["var"]): r["coef"] for r in coefs}
+num = lambda v: f"{v:.2f}".rstrip("0").rstrip(".").replace(".", ",").replace("-", "−")
+kv = lambda s, v: num(cval[(f"GVA_{s}", v)])
+met = {k: num(estimated()[k][0]) if k in estimated() else num(SHOCKS[k][0]) for k in ("MET_B", "MET_C")}
+
+
 out = {}
 out["COEFS!A5:L22"] = [[f"GVA_{r['eq'][4:]}_{r['var']}", "B1", r["eq"], r["var"], float(r["coef"]),
                         None if r["se"] is None else float(r["se"]),
                         None if r["se"] in (None, 0) else round(float(r["coef"]) / float(r["se"]), 1),
-                        "2016–2025" if r["n"] else "", r["method"],
-                        None if r["r2"] is None else float(r["r2"]), "2026-10-21", r["note"]] for r in coefs]
+                        r.get("period", "2016–2025") if r["n"] else "", r["method"],
+                        None if r["r2"] is None else float(r["r2"]), "2026-10-23" if r.get("period") else "2026-10-21", r["note"]] for r in coefs]
 
 text = [
     ["1. Реальный сектор"],
@@ -64,18 +70,20 @@ drv = [
 for code, name, unit, v25, srow, src in drv:
     text.append([code, name, unit, v25] + [f"=SCENARIOS!{c}{srow}" for c in "LMN"] + [src])
 out["B1_REAL!A1:H15"] = text
-# metallurgy utilisation (sheet.shocks_payload); MAX(;1) keeps a full stop finite
+# metallurgy utilisation (sheet.shocks_payload). The shock is elasticity × change in utilisation in points
+# of 2025 output: a restart from a low base (15 -> 50) adds 35% of the 2025 output, not +233%
 out["B1_REAL!A16:H16"] = [["MET", "Металлургия: загрузка мощностей", "% от 2025", 100,
                            "=SCENARIOS!L63", "=SCENARIOS!M63", "=SCENARIOS!N63", "SCENARIOS (отраслевые шоки)"]]
-MET = lambda s, c, p: f"+COEFS!$E${SHOCK_ROW['MET_' + s]}*(MAX({c}$16;1)/MAX({p}$16;1)-1)*100"
+MET = lambda s, c, p: f"+COEFS!$E${SHOCK_ROW['MET_' + s]}*({c}$16-{p}$16)"
 
 g = annual_growth(real_levels_q())
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
-    "B": ("−2,2 + 0,11 × рост портов + 0,3 × рост мощности + 0,2 × изменение загрузки металлургии",
+    "B": (f"{kv('B','const')} + {kv('B','PORTS')} × рост портов + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
           lambda c, p: f"={C('B','const')}+{C('B','PORTS')}*({c}$12/{p}$12-1)*100+{C('B','CAP')}*({c}$13/{p}$13-1)*100{MET('B', c, p)}"),
-    "C": ("2,66 + 0,59 × ВВП еврозоны + 0,3 × рост мощности + 0,12 × изменение загрузки металлургии",
-          lambda c, p: f"={C('C','const')}+{C('C','EA_GDP')}*{c}$14+{C('C','CAP')}*({c}$13/{p}$13-1)*100{MET('C', c, p)}"),
+    "C": (f"{kv('C','const')} + {kv('C','HH')} × рост потребления домохозяйств (B2) + {kv('C','CAP')} × рост мощности "
+          f"+ {met['MET_C']} × изменение загрузки металлургии",
+          lambda c, p: f"={C('C','const')}+{C('C','HH')}*B2_DEMAND!{c}$20+{C('C','CAP')}*({c}$13/{p}$13-1)*100{MET('C', c, p)}"),
     "D": ("рост мощности (эластичность 1)", lambda c, p: f"={C('D','const')}+{C('D','CAP')}*({c}$13/{p}$13-1)*100"),
     "F": ("тренд 2024–2025 + влияние ставки (B7)", lambda c, p: f"={C('F','const')}+B7_MONETARY!{c}41"),
     "G": ("константа (до связки с потреблением B2)", lambda c, p: f"={C('G','const')}"),
