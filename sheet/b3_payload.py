@@ -26,7 +26,7 @@ out = {}
 end = COEF_FIRST + len(coefs) - 1
 out[f"COEFS!A{COEF_FIRST}:L{end}"] = [
     [f"{r['eq']}_{r['var']}", "B3", r["eq"], r["var"], r["coef"], r["se"], round(r["coef"] / r["se"], 1),
-     "2011–2025" if r["method"] == quarterly.METHOD else "2016–2025", r["method"], r["r2"], "2026-10-21", r["note"]] for r in coefs]
+     r.get("period", "2016–2025"), r["method"], r["r2"], "2026-10-21", r["note"]] for r in coefs]
 
 # Stronger pass-through above the devaluation threshold (quarterly estimate); rows after the shocks block
 FX_BIG_ROW, FX_THR_ROW = 95, 96

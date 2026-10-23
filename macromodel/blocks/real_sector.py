@@ -138,10 +138,17 @@ CALIBRATED = {
     ("O", "DEF"): (0.3, "Реакция на изменение доли расходов на оборону в ВВП"),
 }
 
+# Quarterly GVA_C (macromodel.quarterly): metallurgy enters the model through SHOCK_MET_C, not this fit
+QUARTERLY_NOTES = {
+    ("C", "const"): "Регрессия с выпуском металлургии (0,41) и потреблением; в модели металлургия идёт через "
+                    "SHOCK_MET_C (оценка по текущей структуре)",
+    ("C", "HH"): "Заменила ВВП еврозоны (в годовой оценке незначим, t 0,9): ретропрогноз 4,3 против 6,4",
+}
+
 COEF_ROWS = [
     ("A", "const"), ("A", "HARVEST"),
     ("B", "const"), ("B", "PORTS"), ("B", "CAP"),
-    ("C", "const"), ("C", "EA_GDP"), ("C", "CAP"),
+    ("C", "const"), ("C", "HH"), ("C", "CAP"),
     ("D", "const"), ("D", "CAP"),
     ("F", "const"),
     ("G", "const"),
@@ -153,13 +160,16 @@ COEF_ROWS = [
 
 
 def coef_table() -> list[dict]:
+    from macromodel import quarterly
     from macromodel.blocks.demand import link_other_to_consumption
 
     est = estimate()
     est["OTHER"] = link_other_to_consumption()  # COEFS row 35 holds its HH slope
     rows = []
     for s, var in COEF_ROWS:
-        if (s, var) in CALIBRATED:
+        if f"GVA_{s}" in quarterly.USED and (s, var) not in CALIBRATED:
+            rows += [dict(r, note=QUARTERLY_NOTES.get((s, var), "")) for r in quarterly.coef_rows(f"GVA_{s}", [(f"GVA_{s}", var)])]
+        elif (s, var) in CALIBRATED:
             v, note = CALIBRATED[(s, var)]
             rows.append({"eq": f"GVA_{s}", "var": var, "coef": v, "se": None, "r2": None, "n": None,
                          "method": "калибровка", "note": note})

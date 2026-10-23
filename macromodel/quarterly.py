@@ -40,9 +40,10 @@ EQUATIONS = {
     "GDPE_HH": ("HH", ["REAL_WAGE"]),
     "GDPE_GOV": ("GOV", ["REAL_DEF"]),
     "GDPE_IMP": ("IMP", ["DOM_DEMAND"]),
+    "GVA_C": ("GVA_C", ["MET", "HH"]),  # manufacturing on metallurgy output and household demand
 }
 INERTIA = ("CPI", ["FX", "FX_BIG", "WAGE", "CPI_L1"])
-USED = {"CPI", "LOAN", "GDPE_HH", "GDPE_IMP"}
+USED = {"CPI", "LOAN", "GDPE_HH", "GDPE_IMP", "GVA_C"}
 
 
 def long_quarterly() -> pd.DataFrame:
@@ -67,6 +68,7 @@ def data(long: bool = True) -> pd.DataFrame:
             "HH": d["GDPE_HH_YOY"], "GOV": d["GDPE_GEN_GOV_YOY"], "IMP": d["GDPE_IGS_YOY"], "DOM_DEMAND": dom,
             "REAL_WAGE": yoy(d["WAGE_NOM"] / cpi),
             "REAL_DEF": yoy(d["BUDGET_DEFENCE"] / (d["GDP_NOM"] / d["GDP_REAL"])),
+            "GVA_C": d["GVA_C_YOY"], "MET": d["IND_C8_YOY"],
         })
         q["CPI_L1"] = q["CPI"].shift()
         q["RATE_L1"] = q["RATE"].shift()
@@ -153,8 +155,12 @@ def cpi_speed() -> tuple[float, float]:
 def coef_rows(eq: str, rows: list) -> list[dict]:
     """COEFS rows for an equation in USED: rows are (eq_id_on_sheet, var) pairs."""
     r = estimate()[eq]
+    y, regs = EQUATIONS[eq]
+    first = sample(data(), y, regs).index[0][:4]  # later than FIRST when a driver starts later
+    method = METHOD.replace(FIRST[:4], first)
     return [{"eq": e, "var": v, "coef": round(float(r["coef"][v]), 2), "se": round(float(r["se"][v]), 2),
-             "r2": round(r["r2"], 2), "n": r["n"], "method": METHOD, "note": ""} for e, v in rows]
+             "r2": round(r["r2"], 2), "n": r["n"], "method": method, "period": f"{first}–{LAST[:4]}", "note": ""}
+            for e, v in rows]
 
 
 if __name__ == "__main__":

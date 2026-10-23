@@ -8,7 +8,7 @@ import sys
 
 from macromodel.blocks.demand import COMPONENTS, coef_table, link_other_to_consumption, real_levels_q, regressors
 from macromodel.blocks.real_sector import annual_growth
-from macromodel.blocks.shocks import SHOCK_ROW
+from macromodel.blocks.shocks import SHOCK_ROW, estimated
 
 COEF_FIRST = 23  # B1 uses COEFS rows 5-22
 LAST_COL = 53  # BA = 2026Q2, last actual quarter
@@ -33,7 +33,7 @@ end = COEF_FIRST + len(coefs) - 1
 out[f"COEFS!A{COEF_FIRST}:L{end}"] = [
     [f"{r['eq']}_{r['var']}", "B2", r["eq"], r["var"], float(r["coef"]),
      "" if r["se"] is None else r["se"], "" if not r["se"] else round(r["coef"] / r["se"], 1),
-     ("2011–2025" if "2011" in r["method"] else "2016–2025") if r["n"] else "", r["method"], "" if r["r2"] is None else r["r2"], "2026-10-21", r["note"]]
+     r.get("period", "2016–2025") if r["n"] else "", r["method"], "" if r["r2"] is None else r["r2"], "2026-10-21", r["note"]]
     for r in coefs]
 
 x = regressors().loc["2025"]
@@ -70,9 +70,9 @@ eqs = {
     "GOV": ("−1,24 + 0,17 × рост реальных расходов на оборону", lambda c, p: f"={C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15"),
     "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7)",
              lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40"),
-    "EXP": ("−3,1 + 0,28 × рост портов + 0,07 × изменение загрузки металлургии",
+    "EXP": ("−3,1 + 0,28 × рост портов + " + f"{estimated()['MET_X'][0]:.2f}".replace(".", ",") + " × изменение загрузки металлургии",
             lambda c, p: f"={C('EXP','const')}+{C('EXP','PORTS')}*({c}$12/{p}$12-1)*100"
-                         f"+COEFS!$E${SHOCK_ROW['MET_X']}*(MAX(B1_REAL!{c}$16;1)/MAX(B1_REAL!{p}$16;1)-1)*100"),
+                         f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16)"),
     "IMP": (f"{kv('IMP', 'const')} + {kv('IMP', 'DOM_DEMAND')} × рост внутреннего спроса", lambda c, p: f"={C('IMP','const')}+{C('IMP','DOM_DEMAND')}*{c}$16"),
     "INV": ("растут вместе с ВВП по производству", lambda c, p: f"={C('INV','GDP_P')}*{c}$11"),
 }

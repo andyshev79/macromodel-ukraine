@@ -5,3 +5,4 @@ data/raw/*
 !data/raw/.gitkeep
 secrets/
 *.json.key
+data/recalc/payload.json
