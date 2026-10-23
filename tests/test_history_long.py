@@ -54,3 +54,12 @@ def test_trade_groups_year_labels_as_numbers_and_text(tmp_path):
     df = nbu_files.trade_groups_m(p, "1.1")
     assert list(df.index.astype(str)) == ["2020-12", "2021-01", "2021-02"]
     assert df.loc[pd.Period("2021-02", "M"), "METALS"] == 2
+
+
+def test_copied_year_is_dropped():
+    from macromodel.loaders import macrostat
+    idx = pd.period_range("2011-01", periods=36, freq="M")
+    vals = [100.0 + (i % 12) for i in range(24)] + [100.0] * 12
+    df = pd.DataFrame({"X": vals}, index=idx)
+    out = macrostat._drop_copied_years(df)
+    assert sorted(set(out.index.year)) == [2011, 2013]

@@ -197,9 +197,21 @@ CPI_ITEMS = {
 }
 
 
+def _drop_copied_years(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop a year whose twelve months repeat the previous year cell for cell: the CPI
+    sheet has 2012 pasted over with 2011."""
+    years = sorted(set(df.index.year))
+    bad = []
+    for y in years[1:]:
+        a, b = df[df.index.year == y - 1], df[df.index.year == y]
+        if len(a) == len(b) == 12 and a.notna().any().any() and (a.values == b.values).all():
+            bad.append(y)
+    return df[~df.index.year.isin(bad)]
+
+
 def cpi_items_mom(path: Path) -> pd.DataFrame:
     """CPI components, index to the previous month (=100), sheet CPI."""
-    return _monthly_columns(path, "CPI", 0, 4, CPI_ITEMS)
+    return _drop_copied_years(_monthly_columns(path, "CPI", 0, 4, CPI_ITEMS))
 
 
 def cpi_extra_yoy(path: Path) -> pd.DataFrame:
