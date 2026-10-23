@@ -8,7 +8,9 @@ import json
 import sys
 
 from macromodel import quarterly
-from macromodel.blocks.shocks import COEF_FIRST, MET_ROW, SHOCKS, TARIFF_ROW
+from macromodel.blocks.shocks import COEF_FIRST, MET_ROW, SHOCKS, TARIFF_ROW, estimated
+
+EST = estimated()
 
 
 def coef_row(k, v, block, note):
@@ -18,6 +20,10 @@ def coef_row(k, v, block, note):
                 quarterly.METHOD, "", "2026-10-23",
                 "Инерция инфляции: доля разрыва между прошлым кварталом и годовой моделью B3, закрываемая за квартал. "
                 "Оценка: ИПЦ г/г на курс, зарплату и ИПЦ прошлого квартала (1 − коэффициент при нём). Тарифы добавляются сразу"]
+    if k in EST:
+        v, se, period, method, note = EST[k]
+        return [f"SHOCK_{k}", block, "SHOCK", k, round(v, 2), round(se, 2) if se else "", round(v / se, 1) if se else "",
+                period, method, "", "2026-10-23", note]
     return [f"SHOCK_{k}", block, "SHOCK", k, v, "", "", "", "калибровка", "", "2026-10-23", note]
 
 
@@ -37,4 +43,6 @@ out[f"SCENARIOS!A{TARIFF_ROW - 2}:N{MET_ROW}"] = [
     ["Металлургия: загрузка мощностей, средняя за год", "% от уровня 2025"] + [100] * 9
     + [choose(cols) for cols in ("CFI", "DGJ", "EHK")],
 ]
+if "--coefs" in sys.argv:  # SCENARIOS rows hold the user's shock inputs: rewrite only on a fresh frame
+    out = {k: v for k, v in out.items() if k.startswith("COEFS")}
 json.dump(out, sys.stdout, ensure_ascii=False)

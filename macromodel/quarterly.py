@@ -19,7 +19,9 @@ import numpy as np
 import pandas as pd
 
 from macromodel.blocks.demand import cpi_index_q, real_levels_q
-from macromodel.blocks.real_sector import quarterly
+from macromodel.blocks.real_sector import HIST, quarterly
+
+HIST_LONG = HIST / "long"
 
 FIRST, LAST = "2011Q1", "2025Q4"
 FX_THR = 15  # devaluation, % y/y, above which pass-through to CPI rises (2014–2015 crisis)
@@ -45,9 +47,8 @@ USED = {"CPI", "LOAN", "GDPE_HH", "GDPE_IMP"}
 
 def long_quarterly() -> pd.DataFrame:
     """Quarterly history from 2005 (data/history/long), same codes as data/history."""
-    from macromodel.blocks.real_sector import HIST
-    s = pd.read_csv(HIST / "long" / "series_q.csv", index_col=0)
-    a = pd.read_csv(HIST / "long" / "anchors_q.csv", index_col=0)
+    s = pd.read_csv(HIST_LONG / "series_q.csv", index_col=0)
+    a = pd.read_csv(HIST_LONG / "anchors_q.csv", index_col=0)
     return pd.concat([s, a]).T.apply(pd.to_numeric, errors="coerce")
 
 
