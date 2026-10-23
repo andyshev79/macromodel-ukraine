@@ -8,6 +8,7 @@ import sys
 
 from macromodel.blocks.demand import COMPONENTS, coef_table, link_other_to_consumption, real_levels_q, regressors
 from macromodel.blocks.real_sector import annual_growth
+from macromodel.blocks.shocks import SHOCK_ROW
 
 COEF_FIRST = 23  # B1 uses COEFS rows 5-22
 LAST_COL = 53  # BA = 2026Q2, last actual quarter
@@ -68,7 +69,9 @@ eqs = {
     "GOV": ("−1,24 + 0,17 × рост реальных расходов на оборону", lambda c, p: f"={C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15"),
     "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7)",
              lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40"),
-    "EXP": ("−3,1 + 0,28 × рост портов", lambda c, p: f"={C('EXP','const')}+{C('EXP','PORTS')}*({c}$12/{p}$12-1)*100"),
+    "EXP": ("−3,1 + 0,28 × рост портов + 0,07 × изменение загрузки металлургии",
+            lambda c, p: f"={C('EXP','const')}+{C('EXP','PORTS')}*({c}$12/{p}$12-1)*100"
+                         f"+COEFS!$E${SHOCK_ROW['MET_X']}*(MAX(B1_REAL!{c}$16;1)/MAX(B1_REAL!{p}$16;1)-1)*100"),
     "IMP": ("1,96 + 0,94 × рост внутреннего спроса", lambda c, p: f"={C('IMP','const')}+{C('IMP','DOM_DEMAND')}*{c}$16"),
     "INV": ("растут вместе с ВВП по производству", lambda c, p: f"={C('INV','GDP_P')}*{c}$11"),
 }
