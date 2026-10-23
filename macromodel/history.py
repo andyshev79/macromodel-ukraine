@@ -15,9 +15,9 @@ from typing import Callable
 
 import pandas as pd
 
-from macromodel.aggregate import to_quarter
+from macromodel.aggregate import to_quarter, to_year
 from macromodel.anchors import ANCHORS
-from macromodel.loaders import macrostat, minfin_index, nbu, nbu_api, nbu_monetary, worldbank
+from macromodel.loaders import gosstat, macrostat, minfin_index, nbu, nbu_api, nbu_files, nbu_monetary, worldbank
 
 BASE_YEAR = 2021  # real GDP is expressed in average prices of this year
 
@@ -43,6 +43,7 @@ class Data:
         self._fx = None
         self._debt = None
         self._money = None
+        self._files: dict[str, Path] = {}
 
     @property
     def macrostat(self) -> Path:
@@ -51,6 +52,11 @@ class Data:
         if not path.exists():
             raise FileNotFoundError(f"{path} not found: export MacroStat from Google Sheets as .xlsx")
         return path
+
+    def nbu_file(self, name: str) -> Path:
+        if name not in self._files:
+            self._files[name] = nbu_files.path(self.cache, name, refresh=self.refresh_from is not None)
+        return self._files[name]
 
     def money(self) -> pd.DataFrame:
         if self._money is None:
@@ -190,8 +196,24 @@ def _cpi(d, tzep="PCCM_"):
     return _pct(d.s("prices_m", "prices_price_cpi_", tzep, mcrd081="Total", ku="None"))
 
 
-def _ppi(d, tzep="PCCM_"):
-    return _pct(d.s("prices_m", "prices_price_ppi_", tzep, mcrk110="BCDE"))
+def _ppi(d, tzep="PCCM_", branch="BCDE"):
+    return _pct(d.s("prices_m", "prices_price_ppi_", tzep, mcrk110=branch))
+
+
+def _ppi_yoy_q(d, branch="BCDE", old="TOTAL"):
+    """PPI y/y at quarter end: API from 2013; before that MacroStat (industry, end month,
+    from 2011) and the NBU PPI_q file (2007-2012, quarter average, so close but not identical)."""
+    out = m_to_q(_ppi(d, branch=branch), "END")
+    if branch == "BCDE":
+        try:
+            ms = m_to_q(macrostat.cpi_extra_yoy(d.macrostat)["PPI"] - 100, "END")
+            out = out.combine_first(ms)
+        except FileNotFoundError:
+            pass
+    old_q = nbu_files.ppi_q(d.nbu_file("ppi_q"))
+    if old in old_q:
+        out = out.combine_first(q_label(old_q[old].rename(index=str)))
+    return out.sort_index()
 
 
 def _bop(d, id_api, t023="#", s181="0"):
@@ -248,15 +270,18 @@ def _elec(d):
 
 
 def _wage(d):
-    """Monthly Gosstat wages from the API; quarters the API skips (2022-2023, 2024H2) from
-    the quarterly figures in MacroStat, only up to the last quarter the API covers."""
+    """Monthly Gosstat wages from the API (from 2013); 2010-2012 and months the API skips
+    from the NBU Wages_m file; quarters still missing (2022-2023, 2024H2) from the quarterly
+    figures in MacroStat, only from 2022 (its earlier rows disagree with Gosstat) and only
+    up to the last quarter the API covers."""
     api = m_to_q(d.s("labour_m", "lmss_fund_pay_wage", "N_ONE", mcrk110="TOTAL"), "AVG")
+    out = api.combine_first(m_to_q(nbu_files.wages_m(d.nbu_file("wages_m")), "AVG"))
     try:
         ms = macrostat.wages_q(d.macrostat)
     except FileNotFoundError:
-        return api
-    gaps = ms[(ms.index <= api.index.max()) & ~ms.index.isin(api.index)]
-    return pd.concat([api, gaps]).sort_index()
+        return out
+    gaps = ms[(ms.index >= "2022Q1") & (ms.index <= api.index.max()) & ~ms.index.isin(out.index)]
+    return pd.concat([out, gaps]).sort_index()
 
 
 def _unemp(d):
@@ -271,7 +296,7 @@ ANCHOR_RECIPES = [
     Recipe("GDP_NOM", "", "", "НБУ API (Госстат)", "ea_gdp_ps_gdp_cp, F_", lambda d: q_label(_gdp(d)[0])),
     Recipe("DEFL", "", f"{BASE_YEAR}=100", "расчёт", "GDP_NOM / GDP_REAL × 100; сезонный рисунок от сцепления, сравнивать г/г", lambda d: q_label(_gdp(d)[0]) / _gdp_real(d) * 100),
     Recipe("CPI_YOY", "", "", "НБУ API (Госстат)", "ИПЦ, % к тому же месяцу прошлого года, последний месяц квартала", lambda d: m_to_q(_cpi(d), "END")),
-    Recipe("PPI_YOY", "", "", "НБУ API (Госстат)", "ИЦП промышленности (BCDE), % г/г, последний месяц квартала", lambda d: m_to_q(_ppi(d), "END")),
+    Recipe("PPI_YOY", "", "", "НБУ API (Госстат); до 2013 MacroStat и НБУ PPI_q", "ИЦП промышленности (BCDE), % г/г, последний месяц квартала; 2011–2012 из MacroStat (лист CPI), 2007–2010 из файла НБУ PPI_q (квартал к кварталу прошлого года)", _ppi_yoy_q),
     Recipe("FX_AVG", "", "", "НБУ (официальный курс)", "Среднее дневных значений", lambda d: to_quarter(d.fx(), "AVG")),
     Recipe("FX_EOP", "", "", "НБУ (официальный курс)", "Последний день квартала", lambda d: to_quarter(d.fx(), "END")),
     Recipe("NBU_RATE", "", "", "НБУ API", "KEY_PolicyRate, последний день квартала", lambda d: to_quarter(_key(d), "END")),
@@ -280,7 +305,7 @@ ANCHOR_RECIPES = [
     Recipe("POP", "", "", "Всемирный банк (оценка)", "SP.POP.TOTL, годовое значение на все кварталы; вся Украина по оценке ВБ, не подконтрольная территория", lambda d: annual_to_q(d.wb("SP.POP.TOTL") / 1e6, "AVG")),
     Recipe("EMPL", "", "", "НБУ API (Госстат, ОРС)", "Занятые 15–70, из накопленных средних; обследование прекращено после 2021", lambda d: q_label(_lfs(d, "lmss_actnas_ep1570ap_"))),
     Recipe("UNEMP", "", "", "НБУ API (Госстат, ОРС)", "Безработные / экономически активные 15–70; после 2021 нет данных", _unemp),
-    Recipe("WAGE_NOM", "", "", "НБУ API (Госстат); пропуски из MacroStat", "Средняя месячная зарплата, среднее за квартал; 2022–2023 и 2024Q3–Q4 из квартальных данных Госстата (лист Salary)", _wage),
+    Recipe("WAGE_NOM", "", "", "НБУ API (Госстат); НБУ Wages_m.xlsx; пропуски из MacroStat", "Средняя месячная зарплата, среднее за квартал; 2010–2012 из файла НБУ Wages_m; оставшиеся пропуски 2022–2024 из квартальных данных Госстата (лист Salary)", _wage),
     Recipe("EXP_USD", "", "", "НБУ API (платёжный баланс)", "Товары и услуги, кредит, сумма месяцев", lambda d: m_to_q(_bop(d, "G_S", t023="1"), "SUM")),
     Recipe("IMP_USD", "", "", "НБУ API (платёжный баланс)", "Товары и услуги, дебет, сумма месяцев", lambda d: m_to_q(_bop(d, "G_S", t023="2"), "SUM")),
     Recipe("TRADE_BAL", "", "", "расчёт", "EXP_USD − IMP_USD", lambda d: m_to_q(_bop(d, "G_S", t023="1") - _bop(d, "G_S", t023="2"), "SUM")),
@@ -333,8 +358,8 @@ def _series_recipes() -> list[Recipe]:
                lambda d: _qoq(_cpi(d, "PCPM_"))),
         Recipe("CORE_CPI_YOY", "Базовая инфляция", "% г/г", "НБУ API (Госстат)", "prices_price_ci_ PCCM_, конец квартала",
                lambda d: m_to_q(_pct(d.s("prices_m", "prices_price_ci_", "PCCM_", mcrd081="Total")), "END")),
-        Recipe("IND_PROD_YOY", "Промышленное производство", "% г/г", "НБУ API (Госстат)", "ea_indust_ind_indprod BCDE PCCM_, среднее за квартал минус 100",
-               lambda d: m_to_q(d.s("activity_m", "ea_indust_ind_indprod", "PCCM_", mcrk110="BCDE") - 100, "AVG")),
+        Recipe("IND_PROD_YOY", "Промышленное производство", "% г/г", "НБУ API (Госстат); 2010–2012 MacroStat", "ea_indust_ind_indprod BCDE PCCM_, среднее за квартал минус 100; до 2013 лист SectorIndexes M",
+               _ind_prod),
         Recipe("RETAIL_YOY", "Оборот розницы предприятий, сопоставимые цены", "% г/г", "НБУ API (Госстат)", "ea_trade_rte_ PCCM_, среднее за квартал минус 100",
                lambda d: m_to_q(d.s("activity_m", "ea_trade_rte_", "PCCM_", mcrk110="TOTAL") - 100, "AVG")),
         Recipe("CONSTR_YOY", "Строительная продукция", "% г/г", "НБУ API (Госстат)", "ea_building_index_co_ PCCM_, среднее за квартал минус 100",
@@ -388,6 +413,9 @@ def _series_recipes() -> list[Recipe]:
                lambda d: m_to_q(d.money()["NBU_CD"], "END")),
         Recipe("NIR_USD", "Чистые международные резервы", "млн USD", "НБУ (ms_oper.xlsx)", "Конец квартала",
                lambda d: m_to_q(d.money()["NIR_USD"], "END")),
+        Recipe("STAFF_EMPL", "Среднеучётная численность штатных работников", "тыс. человек", "НБУ Number_m.xlsx (Госстат, предприятия)",
+               "Среднее за квартал; с 2010; продолжается после 2021, когда ОРС прекращено (без ФЛП и малых предприятий)",
+               lambda d: m_to_q(nbu_files.staff_m(d.nbu_file("staff_m")), "AVG")),
         Recipe("WB_UNEMP", "Безработица, модельная оценка МОТ", "%", "Всемирный банк", "SL.UEM.TOTL.ZS, годовое на все кварталы",
                lambda d: annual_to_q(d.wb("SL.UEM.TOTL.ZS"), "AVG")),
     ]
@@ -406,7 +434,84 @@ def _qoq(mom: pd.Series) -> pd.Series:
     return q_label(out[g.count() == 3])
 
 
-SERIES_RECIPES = _series_recipes()
+def _ind_prod(d):
+    api = m_to_q(d.s("activity_m", "ea_indust_ind_indprod", "PCCM_", mcrk110="BCDE") - 100, "AVG")
+    try:
+        ms = m_to_q(macrostat.industry_yoy_m(d.macrostat) - 100, "AVG")
+    except FileNotFoundError:
+        return api
+    return api.combine_first(ms).sort_index()
+
+
+# Industry branches in the NBU API (mcrk110), Gosstat KVED-2010 groups
+IND_BRANCHES = {
+    "B": "добыча", "B1": "добыча угля", "B2": "добыча нефти и газа", "B3": "добыча металлических руд",
+    "C": "переработка", "C1": "пищевая промышленность", "C4": "кокс и нефтепереработка", "C5": "химия",
+    "C7": "резина, пластмассы, неметаллические минералы", "C8": "металлургия и металлоизделия (24–25)",
+    "C9": "машиностроение", "D": "энергетика (электроэнергия, газ, пар)",
+}
+
+# CPI groups (COICOP) in the API; mcrd081 code -> (code suffix, name)
+CPI_GROUPS = {"01": ("FOOD", "продукты питания и безалкогольные напитки"), "02": ("ALC_TOB", "алкоголь и табак"),
+              "04": ("UTIL", "жильё, вода, электроэнергия, газ"), "06": ("HEALTH", "здравоохранение"),
+              "07": ("TRANSPORT", "транспорт")}
+
+# CPI items only MacroStat has (from 2010, so y/y from 2011)
+CPI_DETAIL = {"ELEC": "электроэнергия", "GAS": "природный газ", "HEAT": "горячая вода, отопление",
+              "WATER": "водоснабжение", "FUEL": "топливо и масла"}
+
+
+def _yoy_from_mom(mom: pd.Series) -> pd.Series:
+    """% y/y from monthly indices to the previous month (=100): product of the last 12."""
+    f = (mom.dropna() / 100).sort_index()
+    full = f.rolling(12).count() == 12
+    full &= pd.Series([f.index[i] - 11 == f.index[i - 11] if i >= 11 else False for i in range(len(f))], index=f.index)
+    return (f.rolling(12).apply(lambda x: x.prod(), raw=True) * 100 - 100)[full]
+
+
+def _trade(d, sheet, key):
+    return m_to_q(nbu_files.trade_groups_m(d.nbu_file("trade_m"), sheet)[key], "SUM")
+
+
+def _extra_recipes() -> list[Recipe]:
+    r = []
+    for k, nm in IND_BRANCHES.items():
+        r.append(Recipe(f"IND_{k}_YOY", f"Промпроизводство: {nm}", "% г/г", "НБУ API (Госстат)",
+                        f"ea_indust_ind_indprod {k} PCCM_, среднее за квартал минус 100; с 2013",
+                        lambda d, k=k: m_to_q(d.s("activity_m", "ea_indust_ind_indprod", "PCCM_", mcrk110=k) - 100, "AVG")))
+    r.append(Recipe("PPI_METAL_YOY", "ИЦП: металлургия и металлоизделия", "% г/г", "НБУ API (Госстат); 2007–2012 НБУ PPI_q",
+                    "prices_price_ppi_ C8 PCCM_, конец квартала; до 2013 «Металургійне виробництво» из PPI_q",
+                    lambda d: _ppi_yoy_q(d, "C8", "METALS")))
+    r.append(Recipe("PPI_MINING_YOY", "ИЦП: добыча", "% г/г", "НБУ API (Госстат); 2007–2012 НБУ PPI_q",
+                    "prices_price_ppi_ B PCCM_, конец квартала", lambda d: _ppi_yoy_q(d, "B", "MINING")))
+    for code, (suf, nm) in CPI_GROUPS.items():
+        r.append(Recipe(f"CPI_{suf}_YOY", f"ИПЦ: {nm}", "% г/г", "НБУ API (Госстат)", f"prices_price_cpi_ {code} PCCM_, конец квартала",
+                        lambda d, code=code: m_to_q(_pct(d.s("prices_m", "prices_price_cpi_", "PCCM_", mcrd081=code, ku="None")), "END")))
+    for k, nm in CPI_DETAIL.items():
+        r.append(Recipe(f"CPI_{k}_YOY", f"ИПЦ: {nm}", "% г/г", "MacroStat (лист CPI, Госстат)",
+                        "Произведение 12 месячных индексов, конец квартала; с 2011",
+                        lambda d, k=k: m_to_q(_yoy_from_mom(macrostat.cpi_items_mom(d.macrostat)[k]), "END")))
+    for k in nbu_files.TRADE_GROUPS:
+        if k == "TOTAL":
+            continue
+        r.append(Recipe(f"EXPG_{k}_USD", f"Экспорт товаров: {k.lower()}", "млн USD", "НБУ (Trade_m.xlsx, платёжный баланс)",
+                        "Сумма месяцев; товарные группы по КПБ6", lambda d, k=k: _trade(d, "1.1", k)))
+        r.append(Recipe(f"IMPG_{k}_USD", f"Импорт товаров: {k.lower()}", "млн USD", "НБУ (Trade_m.xlsx, платёжный баланс)",
+                        "Сумма месяцев; товарные группы по КПБ6", lambda d, k=k: _trade(d, "1.2", k)))
+    for k in macrostat.AGRO_PRICES:
+        r.append(Recipe(f"PX_{k}_USD", f"Экспортная цена FOB Черное море: {k.lower()}", "USD/т", "MacroStat (лист AGROTrends)",
+                        "Среднее месячных цен за квартал", lambda d, k=k: m_to_q(macrostat.agro_export_prices_m(d.macrostat)[k], "AVG")))
+    for k in macrostat.BUDGET_ROWS:
+        r.append(Recipe(f"CB_{k}", f"Сводный бюджет: {k.lower()}", "млн грн", "MacroStat (лист Budget, Казначейство)",
+                        "Накопленные с начала года, переведены в кварталы; с 2011",
+                        lambda d, k=k: _past(ytd_to_q(macrostat.budget_consolidated_ytd(d.macrostat)[k]))))
+    r.append(Recipe("CB_DEFSEC", "Сводный бюджет: оборона + общественный порядок и безопасность", "млн грн",
+                    "MacroStat (лист Budget, Казначейство)", "Функциональные коды 0200 + 0300, из накопленных",
+                    lambda d: _past(ytd_to_q(macrostat.budget_consolidated_ytd(d.macrostat)[["EXP_DEFENCE", "EXP_ORDER"]].sum(axis=1, min_count=2)))))
+    return r
+
+
+SERIES_RECIPES = _series_recipes() + _extra_recipes()
 
 
 # ---------------- build ----------------
@@ -446,3 +551,139 @@ def build(cache: Path, start_year: int = 2015, refresh_from: int | None = None):
 def debt_schedule(cache: Path) -> pd.DataFrame:
     """MinFin annual debt payment schedule (UAH billion) for the financing-need block."""
     return macrostat.debt_schedule_y(Data(cache, 2015, None).macrostat)
+
+
+# ---------------- annual history ----------------
+#
+# Estimation on annual data needs years before the quarterly API starts (2010). Each
+# annual row is the quarterly series rolled up where all four quarters exist; earlier
+# years come from an annual source listed in ANNUAL_FALLBACK, and the catalog says from
+# which year the roll-up takes over.
+
+STOCKS = {"RES_USD", "M0", "M3", "EXT_DEBT_USD", "EXT_DEBT_GG_USD", "DEBT_UAH", "REG_UNEMP",
+          "MONETARY_BASE", "NBU_CD", "NIR_USD", "FX_EOP", "NBU_RATE", "DEBT_GDP"}
+
+
+def annual_agg(code: str) -> str:
+    """How a quarterly row rolls up into a year: anchors say so themselves; for the other
+    rows end-of-period measures (stocks, y/y price indices) take Q4, flows the sum and the
+    rest (rates, volume y/y, prices) the mean."""
+    a = next((a for a in ANCHORS if a.code == code), None)
+    if a:
+        return a.agg
+    if code in STOCKS or (code.startswith(("CPI_", "PPI_", "CORE_CPI")) and code.endswith("_YOY")):
+        return "END"
+    if code.endswith(("_NOM", "_USD", "_UAH")) or code.startswith(("CB_", "BUDGET_", "COMP_EMPL")):
+        return "SUM" if not code.startswith("PX_") else "AVG"
+    return "AVG"
+
+
+def _gdp_y(d):
+    return nbu_files.gdp_y(d.nbu_file("gdp_y"))
+
+
+def _wb_y(code, scale=1.0):
+    return lambda d: d.wb(code) * scale
+
+
+# code -> (source, method, fn(d) -> Series indexed by year)
+ANNUAL_FALLBACK = {
+    "GDP_NOM": ("НБУ GDP_y.xlsx (Госстат, СНС 2008)", "Номинальный ВВП за год", lambda d: _gdp_y(d)["GDP_NOM"]),
+    "CPI_YOY": ("Всемирный банк", "До 2007 нет декабрьских данных: среднегодовой ИПЦ (FP.CPI.TOTL.ZG)", _wb_y("FP.CPI.TOTL.ZG")),
+    "LOAN_RATE": ("Всемирный банк", "FR.INR.LEND, средняя ставка по кредитам (все валюты и сроки, старые операции тоже)", _wb_y("FR.INR.LEND")),
+    "DEP_RATE": ("Всемирный банк", "FR.INR.DPST, средняя ставка по депозитам", _wb_y("FR.INR.DPST")),
+    "EXP_USD": ("Всемирный банк (платёжный баланс)", "BX.GSR.GNFS.CD / 1e6", _wb_y("BX.GSR.GNFS.CD", 1e-6)),
+    "IMP_USD": ("Всемирный банк (платёжный баланс)", "BM.GSR.GNFS.CD / 1e6", _wb_y("BM.GSR.GNFS.CD", 1e-6)),
+    "TRADE_BAL": ("Всемирный банк (платёжный баланс)", "BN.GSR.GNFS.CD / 1e6", _wb_y("BN.GSR.GNFS.CD", 1e-6)),
+    "GFCF": ("Всемирный банк", "NE.GDI.FTOT.CN / 1e6", _wb_y("NE.GDI.FTOT.CN", 1e-6)),
+    "WAGE_NOM": ("НБУ Wages_y.xlsx (Госстат)", "Среднемесячная зарплата за год", lambda d: nbu_files.wages_y(d.nbu_file("wages_y"))),
+}
+
+# annual-only rows: code -> (name, unit, source, method, fn)
+ANNUAL_ONLY = {
+    "GDP_REAL_YOY": ("Реальный ВВП, рост", "% г/г", "НБУ GDP_y.xlsx (Госстат)", "Официальный годовой индекс физического объёма минус 100", lambda d: _gdp_y(d)["GDP_REAL_IDX"] - 100),
+    "DEFL_YOY": ("Дефлятор ВВП, рост", "% г/г", "НБУ GDP_y.xlsx (Госстат)", "Индекс-дефлятор минус 100", lambda d: _gdp_y(d)["DEFL_IDX"] - 100),
+    "CPI_AVG_YOY": ("ИПЦ, среднегодовой", "% г/г", "Всемирный банк", "FP.CPI.TOTL.ZG", _wb_y("FP.CPI.TOTL.ZG")),
+    "WB_HH_CONS_YOY": ("Потребление домохозяйств, реальный рост", "% г/г", "Всемирный банк", "NE.CON.PRVT.KD.ZG", _wb_y("NE.CON.PRVT.KD.ZG")),
+    "WB_GFCF_YOY": ("ВНОК, реальный рост", "% г/г", "Всемирный банк", "NE.GDI.FTOT.KD.ZG", _wb_y("NE.GDI.FTOT.KD.ZG")),
+    "WB_EXP_REAL_YOY": ("Экспорт, реальный рост", "% г/г", "Всемирный банк", "NE.EXP.GNFS.KD.ZG", _wb_y("NE.EXP.GNFS.KD.ZG")),
+    "WB_IMP_REAL_YOY": ("Импорт, реальный рост", "% г/г", "Всемирный банк", "NE.IMP.GNFS.KD.ZG", _wb_y("NE.IMP.GNFS.KD.ZG")),
+    "WB_AGR_YOY": ("ВДС сельского хозяйства, реальный рост", "% г/г", "Всемирный банк", "NV.AGR.TOTL.KD.ZG", _wb_y("NV.AGR.TOTL.KD.ZG")),
+    "WB_IND_YOY": ("ВДС промышленности (вкл. строительство), реальный рост", "% г/г", "Всемирный банк", "NV.IND.TOTL.KD.ZG", _wb_y("NV.IND.TOTL.KD.ZG")),
+    "WB_MANUF_YOY": ("ВДС переработки, реальный рост", "% г/г", "Всемирный банк", "NV.IND.MANF.KD.ZG", _wb_y("NV.IND.MANF.KD.ZG")),
+    "WB_SERV_YOY": ("ВДС услуг, реальный рост", "% г/г", "Всемирный банк", "NV.SRV.TOTL.KD.ZG", _wb_y("NV.SRV.TOTL.KD.ZG")),
+    "WB_CREDIT_GDP": ("Кредит частному сектору", "% ВВП", "Всемирный банк", "FS.AST.PRVT.GD.ZS; с 2008", _wb_y("FS.AST.PRVT.GD.ZS")),
+}
+for _k, (_unit, _old, _new) in gosstat.PRODUCTS.items():
+    ANNUAL_ONLY[f"PROD_{_k}"] = (f"Производство: {_k.rsplit('_', 1)[0].lower().replace('_', ' ')}", _unit,
+                                 "Госстат (stat.gov.ua)", f"«{_old}» до 2010" + (f", «{_new}» с 2011" if _new else "; после 2010 конфиденциально"),
+                                 lambda d, k=_k: gosstat.products_y(gosstat.download(d.cache, refresh=d.refresh_from is not None))[k])
+
+
+def _annual_real_gdp(nom_y: pd.Series, real_q_y: pd.Series, idx: pd.Series) -> pd.Series:
+    """Real GDP by year in BASE_YEAR prices: roll-up where available, earlier years chained
+    back through the official annual volume index."""
+    out = real_q_y.dropna().copy()
+    out.index = out.index.astype(int)
+    for y in sorted((y for y in idx.index if y < out.index.min()), reverse=True):
+        if y + 1 in out.index and y + 1 in idx.index:
+            out[y] = out[y + 1] / (idx[y + 1] / 100)
+    return out.sort_index()
+
+
+def build_annual(d: Data, anchors: pd.DataFrame, series: pd.DataFrame, catalog: pd.DataFrame, first_year: int):
+    """Annual table (rows = codes, columns = years) and its catalog; see the note above."""
+    last_year = date.today().year - 1
+    years = list(range(first_year, last_year + 1))
+    rows, cat, errors = {}, [], []
+    base = pd.concat([anchors, series])
+    for code, q in base.iterrows():
+        rolled = to_year(q.dropna(), annual_agg(code))
+        rolled.index = rolled.index.astype(int)
+        src = catalog.set_index("code").loc[code]
+        source, method = src["source"], f"Из кварталов ({annual_agg(code)}): {src['method']}"
+        if code in ANNUAL_FALLBACK:
+            fsrc, fmethod, fn = ANNUAL_FALLBACK[code]
+            try:
+                fb = fn(d)
+                fb.index = fb.index.astype(int)
+                start = rolled.index.min() if len(rolled) else last_year + 1
+                fill = fb[fb.index < start]
+                if len(fill):
+                    rolled = pd.concat([fill, rolled])
+                    source = f"{source}; до {start} — {fsrc}"
+                    method = f"{method}. До {start}: {fmethod}"
+            except Exception as e:
+                errors.append(f"annual {code}: {e}")
+        rows[code] = rolled
+        cat.append({"code": code, "name": src["name"], "unit": src["unit"], "source": source, "method": method})
+    # real GDP and the deflator need the annual chain rather than a roll-up of quarters
+    try:
+        g = _gdp_y(d)
+        real = _annual_real_gdp(rows["GDP_NOM"], rows["GDP_REAL"], g["GDP_REAL_IDX"])
+        for code in ("GDP_REAL", "GDP_REAL_P"):
+            rows[code] = real
+        rows["DEFL"] = (rows["GDP_NOM"] / real * 100).dropna()
+        for c in cat:
+            if c["code"] in ("GDP_REAL", "GDP_REAL_P"):
+                c["method"] += f". До первого полного года кварталов — назад по годовому индексу физобъёма Госстата (GDP_y.xlsx)"
+            if c["code"] == "DEFL":
+                c["method"] = f"GDP_NOM / GDP_REAL × 100 за год ({BASE_YEAR}=100)"
+    except Exception as e:
+        errors.append(f"annual GDP_REAL: {e}")
+    for code, (name, unit, source, method, fn) in ANNUAL_ONLY.items():
+        try:
+            s = fn(d)
+            s.index = s.index.astype(int)
+        except Exception as e:
+            errors.append(f"annual {code}: {e}")
+            s = pd.Series(dtype=float)
+        rows[code] = s
+        cat = [c for c in cat if c["code"] != code]  # an official annual figure replaces the roll-up
+        cat.append({"code": code, "name": name, "unit": unit, "source": source, "method": method})
+    table = pd.DataFrame({k: v.reindex(years) for k, v in rows.items()}).T
+    table.index.name = "code"
+    for c in cat:
+        s = table.loc[c["code"]].dropna()
+        c.update(first=int(s.index.min()) if len(s) else "", last=int(s.index.max()) if len(s) else "", n=len(s))
+    return table, pd.DataFrame(cat), errors
