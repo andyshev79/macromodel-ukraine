@@ -192,6 +192,11 @@ def _pct(s: pd.Series) -> pd.Series:
     return s.mask(s == -99)
 
 
+def _idx(s: pd.Series) -> pd.Series:
+    """Volume index (previous year = 100) to % y/y; a 0 in the API means 'no data'."""
+    return s.mask(s <= 0) - 100
+
+
 def _cpi(d, tzep="PCCM_"):
     return _pct(d.s("prices_m", "prices_price_cpi_", tzep, mcrd081="Total", ku="None"))
 
@@ -361,9 +366,9 @@ def _series_recipes() -> list[Recipe]:
         Recipe("IND_PROD_YOY", "Промышленное производство", "% г/г", "НБУ API (Госстат); 2010–2012 MacroStat", "ea_indust_ind_indprod BCDE PCCM_, среднее за квартал минус 100; до 2013 лист SectorIndexes M",
                _ind_prod),
         Recipe("RETAIL_YOY", "Оборот розницы предприятий, сопоставимые цены", "% г/г", "НБУ API (Госстат)", "ea_trade_rte_ PCCM_, среднее за квартал минус 100",
-               lambda d: m_to_q(d.s("activity_m", "ea_trade_rte_", "PCCM_", mcrk110="TOTAL") - 100, "AVG")),
+               lambda d: m_to_q(_idx(d.s("activity_m", "ea_trade_rte_", "PCCM_", mcrk110="TOTAL")), "AVG")),
         Recipe("CONSTR_YOY", "Строительная продукция", "% г/г", "НБУ API (Госстат)", "ea_building_index_co_ PCCM_, среднее за квартал минус 100",
-               lambda d: m_to_q(d.s("activity_m", "ea_building_index_co_", "PCCM_", mcrk110="TOTAL") - 100, "AVG")),
+               lambda d: m_to_q(_idx(d.s("activity_m", "ea_building_index_co_", "PCCM_", mcrk110="TOTAL")), "AVG")),
         Recipe("M0", "Наличные вне банков (M0)", "млн грн", "НБУ API", "Конец квартала",
                lambda d: m_to_q(d.s("money_m", "M0", "t070_7", k076="Total"), "END")),
         Recipe("M3", "Денежная масса M3", "млн грн", "НБУ API", "Конец квартала",
@@ -435,7 +440,7 @@ def _qoq(mom: pd.Series) -> pd.Series:
 
 
 def _ind_prod(d):
-    api = m_to_q(d.s("activity_m", "ea_indust_ind_indprod", "PCCM_", mcrk110="BCDE") - 100, "AVG")
+    api = m_to_q(_idx(d.s("activity_m", "ea_indust_ind_indprod", "PCCM_", mcrk110="BCDE")), "AVG")
     try:
         ms = m_to_q(macrostat.industry_yoy_m(d.macrostat) - 100, "AVG")
     except FileNotFoundError:
@@ -478,7 +483,7 @@ def _extra_recipes() -> list[Recipe]:
     for k, nm in IND_BRANCHES.items():
         r.append(Recipe(f"IND_{k}_YOY", f"Промпроизводство: {nm}", "% г/г", "НБУ API (Госстат)",
                         f"ea_indust_ind_indprod {k} PCCM_, среднее за квартал минус 100; с 2013",
-                        lambda d, k=k: m_to_q(d.s("activity_m", "ea_indust_ind_indprod", "PCCM_", mcrk110=k) - 100, "AVG")))
+                        lambda d, k=k: m_to_q(_idx(d.s("activity_m", "ea_indust_ind_indprod", "PCCM_", mcrk110=k)), "AVG")))
     r.append(Recipe("PPI_METAL_YOY", "ИЦП: металлургия и металлоизделия", "% г/г", "НБУ API (Госстат); 2007–2012 НБУ PPI_q",
                     "prices_price_ppi_ C8 PCCM_, конец квартала; до 2013 «Металургійне виробництво» из PPI_q",
                     lambda d: _ppi_yoy_q(d, "C8", "METALS")))
