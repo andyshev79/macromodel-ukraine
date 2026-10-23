@@ -6,8 +6,9 @@ def test_quarterly_sample_and_drivers():
     assert set(est) == set(quarterly.EQUATIONS)
     for r in est.values():
         assert r["n"] >= 30 and set(r["oos"]) == set(quarterly.TEST_YEARS)
-    # equations used in the model have significant drivers
-    assert all(est[eq]["min_t"] >= 2 for eq in quarterly.USED)
+    # equations used in the model have drivers significant at 5%
+    assert all(est[eq]["min_t"] >= 1.96 for eq in quarterly.USED)
+    assert est["CPI"]["n"] >= 50  # long history from 2011
 
 
 def test_cpi_speed_between_zero_and_one():

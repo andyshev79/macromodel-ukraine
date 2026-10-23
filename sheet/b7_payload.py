@@ -25,7 +25,7 @@ out[f"COEFS!A{TR_FIRST}:L{TR_FIRST + len(tr) - 1}"] = [
     [f"TR_{r['var']}", "B7", r["eq"], r["var"], r["coef"], "", "", "2016–2025", "калибровка", "", "2026-10-22", r["note"]] for r in tr]
 out[f"COEFS!A{COEF_FIRST}:L{COEF_FIRST + len(coefs) - 1}"] = [
     [f"{r['eq']}_{r['var']}", "B7", r["eq"], r["var"], r["coef"], "" if r["se"] is None else r["se"],
-     "" if not r["se"] else round(r["coef"] / r["se"], 1), "2016–2025" if r["se"] else "2025", r["method"],
+     "" if not r["se"] else round(r["coef"] / r["se"], 1), ("2011–2025" if "2011" in r["method"] else "2016–2025") if r["se"] else "2025", r["method"],
      "" if r["r2"] is None else r["r2"], "2026-10-22", r["note"]] for r in coefs]
 
 h = annual().loc["2025"]

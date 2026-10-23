@@ -6,6 +6,7 @@ ANCHORS forecast formulas are written once per row and copied right in the sheet
 import json
 import sys
 
+from macromodel import quarterly
 from macromodel.blocks.prices import annual, coef_table
 
 COEF_FIRST = 36  # B1 uses COEFS rows 5-22, B2 rows 23-35
@@ -25,7 +26,20 @@ out = {}
 end = COEF_FIRST + len(coefs) - 1
 out[f"COEFS!A{COEF_FIRST}:L{end}"] = [
     [f"{r['eq']}_{r['var']}", "B3", r["eq"], r["var"], r["coef"], r["se"], round(r["coef"] / r["se"], 1),
-     "2016–2025", r["method"], r["r2"], "2026-10-21", r["note"]] for r in coefs]
+     "2011–2025" if r["method"] == quarterly.METHOD else "2016–2025", r["method"], r["r2"], "2026-10-21", r["note"]] for r in coefs]
+
+# Stronger pass-through above the devaluation threshold (quarterly estimate); rows after the shocks block
+FX_BIG_ROW, FX_THR_ROW = 95, 96
+qc = quarterly.estimate()["CPI"]
+out[f"COEFS!A{FX_BIG_ROW}:L{FX_THR_ROW}"] = [
+    ["CPI_FX_BIG", "B3", "CPI", "FX_BIG", round(qc["coef"]["FX_BIG"], 2), round(qc["se"]["FX_BIG"], 2),
+     round(qc["coef"]["FX_BIG"] / qc["se"]["FX_BIG"], 1), "2011–2025", quarterly.METHOD, round(qc["r2"], 2), "2026-10-23",
+     "Добавка к переносу курса на каждый п.п. девальвации сверх порога (строка ниже); оценена на кризисе 2014–2015"],
+    ["CPI_FX_THR", "B3", "CPI", "FX_THR", quarterly.FX_THR, "", "", "", "калибровка", "", "2026-10-23",
+     "Порог девальвации, % г/г: выше него перенос курса в ИПЦ сильнее. Подобран по качеству ретропрогноза (10–30%)"],
+]
+FXB = f"COEFS!$E${FX_BIG_ROW}*MAX({{c}}11-COEFS!$E${FX_THR_ROW};0)"
+kb = f"{qc['coef']['FX_BIG']:.2f}".replace(".", ",")
 
 a = annual().loc["2025"]
 
@@ -66,9 +80,9 @@ top = [
     [""],
     ["2. Цены, средний рост за год, %"],
     ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
-    ["CPI_M", "ИПЦ, модель", f"{k('CPI','const')} + {k('CPI','WAGE')} × рост зарплаты + {k('CPI','FX')} × девальвация + влияние ставки (B7)", round(float(a["CPI"]), 1)]
-    + [f"={C('CPI','const')}+{C('CPI','FX')}*{c}11+{C('CPI','WAGE')}*{c}12+B7_MONETARY!{c}42" for c in "EFG"]
-    + ["Оценка по кварталам (R² 0,44, без 2022Q1–2023Q1); качество — лист MODEL_QUALITY"],
+    ["CPI_M", "ИПЦ, модель", f"{k('CPI','const')} + {k('CPI','WAGE')} × рост зарплаты + {k('CPI','FX')} × девальвация + {kb} × девальвация сверх {quarterly.FX_THR}% + влияние ставки (B7)", round(float(a["CPI"]), 1)]
+    + [f"={C('CPI','const')}+{C('CPI','FX')}*{c}11+{FXB.format(c=c)}+{C('CPI','WAGE')}*{c}12+B7_MONETARY!{c}42" for c in "EFG"]
+    + [f"Оценка по кварталам 2011–2025 (R² {qc['r2']:.2f}, без 2022Q1–2023Q1); качество — лист MODEL_QUALITY".replace(".", ",")],
     ["CPI_YOY", "ИПЦ с учётом факта", "среднее кварталов ANCHORS"] + [f"={avg(c, 10)}" for c in "DEFG"],
     ["PPI_M", "ИЦП, модель", f"{k('PPI','CPI')} × ИПЦ + {k('PPI','TTF')} × рост цены газа", round(float(a["PPI"]), 1)]
     + [f"={C('PPI','const')}+{C('PPI','CPI')}*{c}20+{C('PPI','TTF')}*{c}14" for c in "EFG"] + ["R² 0,89"],
@@ -84,7 +98,7 @@ top = [
     ["3. Вклады в ИПЦ по модели, п.п."],
     ["Код", "Фактор", "", 2025, 2026, 2027, 2028],
     ["CPI_WAGE", "Зарплаты", "", ""] + [f"={C('CPI','WAGE')}*{c}12" for c in "EFG"],
-    ["CPI_FX", "Курс", "", ""] + [f"={C('CPI','FX')}*{c}11" for c in "EFG"],
+    ["CPI_FX", "Курс", "", ""] + [f"={C('CPI','FX')}*{c}11+{FXB.format(c=c)}" for c in "EFG"],
     ["CPI_CONST", "Константа", "", ""] + [f"={C('CPI','const')}" for c in "EFG"],
     ["CPI_RATE", "Ставка НБУ прошлого года", "", ""] + [f"=B7_MONETARY!{c}42" for c in "EFG"],
     ["CPI_M", "ИПЦ, модель", "", ""] + [f"=SUM({c}31:{c}34)" for c in "EFG"],
