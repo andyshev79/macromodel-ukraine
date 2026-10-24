@@ -88,3 +88,21 @@ def test_surveys_parse(tmp_path):
     wb.save(tmp_path / "s.xlsx")
     s = nbu_files.surveys_m(tmp_path / "s.xlsx")
     assert s.loc["2026-01", "BANKS"] == 9.4 and pd.isna(s.loc["2026-02", "BANKS"]) and len(s) == 2
+
+
+def test_nbu_ir_quarter_labels_and_actual_cutoff(tmp_path):
+    from macromodel.loaders import nbu_ir
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "1.2"
+    ws.append(["<<", "Річна зміна", "Річна зміна (попередній прогноз)", "Зміна за квартал", "Адміністративно регульовані ціни, %"])
+    ws.append([None, "Річна зміна"])
+    ws.append([None, "Annual change"])
+    ws.append(["IV.25", 9.7, None, 1.0])
+    ws.append([None, 8.6, None, 2.0])
+    ws.append(["II.26", 10.7, None, 3.0])
+    ws.append([None, 11.0, None, 1.0])  # 2026Q3: forecast in the 2026-Q3 report
+    p = tmp_path / "Tables_Charts_2026-Q3.xlsx"
+    wb.save(p)
+    q = nbu_ir.quarterly([p])
+    assert q["ADMIN"].dropna().to_dict() == {pd.Period("2025Q4"): 9.7, pd.Period("2026Q1"): 8.6, pd.Period("2026Q2"): 10.7}

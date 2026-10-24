@@ -8,6 +8,7 @@
 - macro/Wages_m.xlsx, Wages_y.xlsx: average wage monthly from 2010 and by year from
   1995; the API starts in 2013.
 - macro/Number_m.xlsx: average number of staff employees from 2010, through the war years.
+- macro/CCPI_m.xlsx: core CPI from 2008; the API's core series has gaps (2019-06 reads -92.6).
 - macro/Surveys_price.xlsx, Surveys_rate.xlsx: 12-month-ahead inflation and UAH/USD
   expectations of banks, businesses, households and financial analysts, from 2013.
 
@@ -25,7 +26,7 @@ import requests
 BASE = "https://bank.gov.ua/files"
 FILES = {"trade_m": "ES/Trade_m.xlsx", "gdp_y": "macro/GDP_y.xlsx", "ppi_q": "macro/PPI_q.xlsx",
          "wages_m": "macro/Wages_m.xlsx", "wages_y": "macro/Wages_y.xlsx", "staff_m": "macro/Number_m.xlsx",
-         "surveys_price": "macro/Surveys_price.xlsx", "surveys_rate": "macro/Surveys_rate.xlsx"}
+         "ccpi_m": "macro/CCPI_m.xlsx", "surveys_price": "macro/Surveys_price.xlsx", "surveys_rate": "macro/Surveys_rate.xlsx"}
 
 MONTHS_UA = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"]  # first three letters
 
@@ -178,6 +179,11 @@ def wages_y(p: Path) -> pd.Series:
             if j < len(r) and isinstance(r[j], (int, float)):
                 out[y] = float(r[j])
     return pd.Series(out, dtype=float).sort_index()
+
+
+def core_cpi_yoy_m(p: Path) -> pd.Series:
+    """Core CPI, % to the same month of the previous year (published from 2009)."""
+    return _monthly_row(p, "до відповідного місяця попереднього року", ["1"])
 
 
 # column headers of the Surveys_* sheet "UKR"
