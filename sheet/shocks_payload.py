@@ -8,7 +8,7 @@ import json
 import sys
 
 from macromodel import quarterly
-from macromodel.blocks.shocks import COEF_FIRST, MET_ROW, SHOCKS, TARIFF_ROW, estimated
+from macromodel.blocks.shocks import COEF_FIRST, FUEL_COEF_ROW, FUEL_NORM_ROW, FUEL_ROW, MET_ROW, SHOCKS, TARIFF_ROW, estimated, fuel
 
 EST = estimated()
 
@@ -42,6 +42,23 @@ out[f"SCENARIOS!A{TARIFF_ROW - 2}:N{MET_ROW}"] = [
     ["", ""] + [2026, 2027, 2028] * 4,
     ["Металлургия: загрузка мощностей, средняя за год", "% от уровня 2025"] + [100] * 9
     + [choose(cols) for cols in ("CFI", "DGJ", "EHK")],
+]
+F = fuel()
+out[f"COEFS!A{FUEL_COEF_ROW}:L{FUEL_NORM_ROW}"] = [
+    ["SHOCK_FUEL_W", "B3", "SHOCK", "FUEL_W", round(F["coef"], 3), round(F["se"], 3), round(F["coef"] / F["se"], 1), "2011–2025",
+     quarterly.METHOD, round(F["r2"], 2), "2026-10-24",
+     "ИПЦ г/г на курс, зарплату и цены топлива прошлого квартала (ИПЦ: топливо и масла): +10 п.п. к росту цен топлива "
+     "дают +1 п.п. к ИПЦ через квартал. Через продукты: " + f"{F['food']:.2f}".replace(".", ",")
+     + f" (t {F['food'] / F['food_se']:.1f})".replace(".", ",") + " — дорогое топливо для аграриев и перевозок"],
+    ["SHOCK_FUEL_NORM", "B3", "SHOCK", "FUEL_NORM", round(F["norm"], 1), "", "", "2011–2025", "расчёт по данным", "", "2026-10-24",
+     "Средний рост цен топлива 2011–2025 без 2022Q1–2023Q1, % г/г: он уже в уравнениях ИПЦ, шок — только отклонение от него"],
+]
+fuel_path = [round(F["q3"], 1), 40, 25, 12] + [10] * 6
+out[f"SCENARIOS!A{FUEL_ROW - 1}:L{FUEL_ROW + 1}"] = [
+    ["Цены топлива (для всех сценариев)", "Единицы"] + [f"={c}38" for c in "CDEFGHIJKL"],
+    ["Топливо: бензин, дизель, газ для авто (ИПЦ «топливо и масла»)", "% г/г, конец квартала"] + fuel_path,
+    [f"Как считается: ИПЦ г/г квартала + COEFS!E{FUEL_COEF_ROW} × (рост цен топлива прошлого квартала − COEFS!E{FUEL_NORM_ROW}). "
+     f"2026Q3 — факт Госстата; дальше оценка Claude (топливо дорожает с начала 2026, база сравнения растёт). Пустой квартал = без шока."],
 ]
 if "--coefs" in sys.argv:  # SCENARIOS rows hold the user's shock inputs: rewrite only on a fresh frame
     out = {k: v for k, v in out.items() if k.startswith("COEFS")}

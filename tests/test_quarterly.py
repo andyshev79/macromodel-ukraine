@@ -63,3 +63,11 @@ def test_b4_wage_links():
     assert rows[42][0] == "WAGE_ECON" and rows[45][0] == "INCOME"
     lean = json.loads(subprocess.run([sys.executable, "sheet/b4_payload.py", "--coefs"], capture_output=True, text=True, check=True, env=env).stdout)
     assert not any(k.startswith("SCENARIOS") for k in lean)
+
+
+def test_fuel_shock():
+    from macromodel.blocks.shocks import fuel
+    f = fuel()
+    assert 0.03 < f["coef"] < 0.2 and f["coef"] / f["se"] >= 1.96
+    assert f["food"] / f["food_se"] >= 1.96
+    assert 5 < f["norm"] < 25 and f["last"] > 20
