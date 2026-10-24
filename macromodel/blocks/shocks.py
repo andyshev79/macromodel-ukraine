@@ -7,6 +7,8 @@ in utilisation, in points of 2025 output, moves manufacturing, mining and real e
 metallurgy elasticities below (a restart from 15 to 50 adds 35% of 2025 output, not +233%).
 CPI_SPEED sets inflation inertia: each quarter CPI closes this share of the gap between the
 previous quarter and the annual B3 model.
+Fuel (SCENARIOS row 74, by quarter, all scenarios): CPI y/y gets FUEL_W × (fuel price y/y of the
+previous quarter − its 2011–2025 average FUEL_NORM); the average is already in the CPI equations.
 TARIFF_W, MET_C and MET_X now come from the long history (estimated() below); MET_B stays
 calibrated (the post-invasion fit is not significant).
 """
@@ -27,6 +29,8 @@ SHOCKS = {
 SHOCK_ROW = {k: COEF_FIRST + i for i, k in enumerate(SHOCKS)}
 
 
+FUEL_ROW = 74  # SCENARIOS: fuel prices y/y by quarter
+FUEL_COEF_ROW, FUEL_NORM_ROW = 105, 106  # COEFS, after the wage equation (98-104)
 MET_FIRST = "2024Q1"  # after Mariupol and the 2023 rebound: today's weight of metallurgy
 
 
@@ -57,3 +61,20 @@ def estimated() -> dict:
     out["MET_X"] = (share, None, Q.LAST[:4], "расчёт по данным",
                     f"Доля металлов и изделий в экспорте товаров и услуг {Q.LAST[:4]} (торговля по группам товаров)")
     return out
+
+
+def fuel() -> dict:
+    """CPI y/y on FX, wages and fuel prices of the previous quarter (CPI component 'fuel and lubricants')."""
+    import pandas as pd
+
+    from macromodel import quarterly as Q
+    d, q = Q.long_quarterly(), Q.data()
+    fl = d["CPI_FUEL_YOY"].shift(1).rename("FUEL_L1")
+    df = pd.concat([q["CPI"], q["FX"], q["WAGE"], fl], axis=1).loc[Q.FIRST:Q.LAST].dropna().drop(index=Q.WAR, errors="ignore")
+    r = Q.ols_nw(df["CPI"], df[["FX", "WAGE", "FUEL_L1"]])
+    norm = float(d["CPI_FUEL_YOY"].loc[Q.FIRST:Q.LAST].drop(index=Q.WAR, errors="ignore").mean())
+    food = pd.concat([d["CPI_FOOD_YOY"], q["FX"], fl], axis=1).loc[Q.FIRST:Q.LAST].dropna().drop(index=Q.WAR, errors="ignore")
+    rf = Q.ols_nw(food["CPI_FOOD_YOY"], food[["FX", "FUEL_L1"]])
+    return {"coef": float(r["coef"]["FUEL_L1"]), "se": float(r["se"]["FUEL_L1"]), "r2": float(r["r2"]), "n": len(df),
+            "norm": norm, "food": float(rf["coef"]["FUEL_L1"]), "food_se": float(rf["se"]["FUEL_L1"]),
+            "last": float(d["CPI_FUEL_YOY"]["2026Q2"]), "prev": float(d["CPI_FUEL_YOY"]["2026Q1"]), "q3": float(d["CPI_FUEL_YOY"].get("2026Q3", float("nan")))}

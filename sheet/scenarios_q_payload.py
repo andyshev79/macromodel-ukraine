@@ -12,7 +12,7 @@ Quarter columns C:L of SCENARIOS are 2026Q3..2028Q4, the same order as ANCHORS B
 import json
 import sys
 
-from macromodel.blocks.shocks import SHOCK_ROW, TARIFF_ROW
+from macromodel.blocks.shocks import FUEL_COEF_ROW, FUEL_NORM_ROW, FUEL_ROW, SHOCK_ROW, TARIFF_ROW, fuel
 
 QUARTERS = [f"{y}Q{q}" for y in (2026, 2027, 2028) for q in (1, 2, 3, 4)][2:]
 QCOLS = "CDEFGHIJKL"
@@ -76,10 +76,17 @@ out["ANCHORS!BB5"] = [[f"=IF({o(R['GDP'])}<>\"\";AX5*(1+{o(R['GDP'])}/100);BB6)"
 # CPI: given quarter, else last quarter moving to the B3 model level (inertia) plus utility tariff hikes
 # of the last four quarters (sheet.shocks_payload); tp strips last quarter's tariff part before the step
 tar = lambda first, width: f"COEFS!$E${SHOCK_ROW['TARIFF_W']}*SUM(OFFSET(SCENARIOS!$C${TARIFF_ROW};0;{first};1;{width}))"
+# fuel prices of the previous quarter above their 2011-2025 average (SCENARIOS row FUEL_ROW; 2026Q1-Q2 from data);
+# fp strips last quarter's fuel part, as tp does for tariffs
+F = fuel()
+FQ = f"SCENARIOS!$C${FUEL_ROW}:$L${FUEL_ROW}"
+fx = lambda v: f"IF({v}=\"\";0;COEFS!$E${FUEL_COEF_ROW}*({v}-COEFS!$E${FUEL_NORM_ROW}))"
 out["ANCHORS!BB10"] = [[f"=LET(c;COLUMN()-COLUMN($BB$1);o;{o(R['CPI'])};"
                         f"m;INDEX(B3_PRICES!$E$19:$G$19;MATCH(BB$2;B3_PRICES!$E$10:$G$10;0));"
-                        f"t;{tar('MAX(0;c-3)', 'MIN(4;c+1)')};tp;IF(c=0;0;{tar('MAX(0;c-4)', 'MIN(4;c)')});p;BA10-tp;"
-                        f"IF(o<>\"\";o;p+COEFS!$E${SHOCK_ROW['CPI_SPEED']}*(m-p)+t))"]]
+                        f"t;{tar('MAX(0;c-3)', 'MIN(4;c+1)')};tp;IF(c=0;0;{tar('MAX(0;c-4)', 'MIN(4;c)')});"
+                        f"fnow;IF(c=0;{str(round(F['last'], 1)).replace('.', ',')};INDEX({FQ};c));fold;IF(c=0;{str(round(F['prev'], 1)).replace('.', ',')};IF(c=1;{str(round(F['last'], 1)).replace('.', ',')};INDEX({FQ};c-1)));"
+                        f"f;{fx('fnow')};fp;{fx('fold')};p;BA10-tp-fp;"
+                        f"IF(o<>\"\";o;p+COEFS!$E${SHOCK_ROW['CPI_SPEED']}*(m-p)+t+f))"]]
 out["ANCHORS!BB12"] = [[f"=IF({o(R['FX'])}<>\"\";{o(R['FX'])};BA12)"]]
 out["ANCHORS!BD12"] = [[f"=IF({ov('BD', R['FX'])}<>\"\";{ov('BD', R['FX'])};AZ12*(1+INDEX(B3_PRICES!$E$11:$G$11;MATCH(BD$2;B3_PRICES!$E$10:$G$10;0))/100))"]]
 out["ANCHORS!BB14"] = [[f"=IF({o(R['RATE'])}<>\"\";{o(R['RATE'])};BA14)"]]
