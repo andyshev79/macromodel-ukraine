@@ -17,7 +17,7 @@ import pandas as pd
 
 from macromodel.aggregate import to_quarter, to_year
 from macromodel.anchors import ANCHORS
-from macromodel.loaders import gosstat, macrostat, metals, minfin_index, nbu, nbu_api, nbu_files, nbu_monetary, worldbank
+from macromodel.loaders import commodities, gosstat, macrostat, metals, minfin_index, nbu, nbu_api, nbu_files, nbu_ir, nbu_monetary, worldbank
 
 BASE_YEAR = 2021  # real GDP is expressed in average prices of this year
 
@@ -37,6 +37,7 @@ class Data:
 
     def __init__(self, cache: Path, start_year: int, refresh_from: int | None):
         self.cache, self.start, self.refresh_from = cache, start_year, refresh_from
+        self._ir = None
         self.end = date.today().year
         self._nbu: dict[str, pd.DataFrame] = {}
         self._wb: dict[str, pd.Series] = {}
@@ -361,8 +362,8 @@ def _series_recipes() -> list[Recipe]:
                lambda d: q_label(d.s("gdp_q", "ea_gdp_is_emp_comp", "F_"))),
         Recipe("CPI_QOQ", "ИПЦ, квартал к кварталу", "%", "НБУ API (Госстат)", "Произведение месячных индексов",
                lambda d: _qoq(_cpi(d, "PCPM_"))),
-        Recipe("CORE_CPI_YOY", "Базовая инфляция", "% г/г", "НБУ API (Госстат)", "prices_price_ci_ PCCM_, конец квартала",
-               lambda d: m_to_q(_pct(d.s("prices_m", "prices_price_ci_", "PCCM_", mcrd081="Total")), "END")),
+        Recipe("CORE_CPI_YOY", "Базовая инфляция", "% г/г", "НБУ CCPI_m.xlsx (Госстат)", "К тому же месяцу прошлого года, конец квартала; с 2009",
+               lambda d: m_to_q(nbu_files.core_cpi_yoy_m(d.nbu_file("ccpi_m")), "END")),
         Recipe("IND_PROD_YOY", "Промышленное производство", "% г/г", "НБУ API (Госстат); 2010–2012 MacroStat", "ea_indust_ind_indprod BCDE PCCM_, среднее за квартал минус 100; до 2013 лист SectorIndexes M",
                _ind_prod),
         Recipe("RETAIL_YOY", "Оборот розницы предприятий, сопоставимые цены", "% г/г", "НБУ API (Госстат)", "ea_trade_rte_ PCCM_, среднее за квартал минус 100",
@@ -522,7 +523,32 @@ def _extra_recipes() -> list[Recipe]:
             r.append(Recipe(f"{pre}_{k}", f"{nm}: {who}", unit, f"НБУ {file.title()}.xlsx (опросы)",
                             "Среднее опросов квартала (группы опрашиваются с разной частотой); с 2013",
                             lambda d, f=file, k=k: _q_mean(nbu_files.surveys_m(d.nbu_file(f))[k])))
+    for k, nm in CPI_NBU.items():
+        r.append(Recipe(f"CPI_{k}_YOY", f"ИПЦ по разбивке НБУ: {nm}", "% г/г", "НБУ, данные графиков Инфляционного отчёта",
+                        "Конец квартала; помесячный график с 2023, раньше квартальные графики отчётов (только факт)",
+                        lambda d, k=k: _cpi_nbu(d, k)))
+    r.append(Recipe("PX_BRENT_USD", "Нефть Brent", "USD/барр.", "EIA (RBRTE) через datasets/oil-prices", "Среднее месячных цен за квартал",
+                    lambda d: m_to_q(commodities.brent_m(d.cache, refresh=d.refresh_from is not None), "AVG")))
     return r
+
+
+# NBU's CPI split; codes avoid the COICOP rows (CPI_FUEL_YOY is "fuels and lubricants")
+CPI_NBU = {"RAW_FOOD": "сырые продукты", "ADMIN": "административно регулируемые цены", "FUEL_NBU": "топливо",
+           "PROC_FOOD": "обработанные продукты (с 2023)", "NONFOOD": "непродовольственные товары (с 2023)",
+           "SERVICES": "услуги (с 2023)"}
+
+
+def _cpi_nbu(d, k: str) -> pd.Series:
+    if d._ir is None:
+        paths = nbu_ir.download(d.cache, refresh=d.refresh_from is not None)
+        d._ir = (nbu_ir.quarterly(paths), nbu_ir.monthly(paths))
+    q, m = d._ir
+    k = k.replace("_NBU", "")
+    out = m_to_q(m[k], "END") if k in m else pd.Series(dtype=float)
+    if k in q:
+        old = q_label(q[k].dropna())
+        out = out.combine_first(old)
+    return out.sort_index()
 
 
 METALS = {"STEEL_KT": "сталь", "PIG_IRON_KT": "чугун", "ROLLED_KT": "прокат"}
