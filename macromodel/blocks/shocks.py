@@ -5,10 +5,9 @@ housing and utilities in CPI times the hike, in the quarter of the hike and the 
 Metallurgy (SCENARIOS row 63, utilisation in % of 2025, by year and scenario): the change
 in utilisation, in points of 2025 output, moves manufacturing, mining and real exports by the
 metallurgy elasticities below (a restart from 15 to 50 adds 35% of 2025 output, not +233%).
-CPI_SPEED sets inflation inertia: each quarter CPI closes this share of the gap between the
-previous quarter and the annual B3 model.
-Fuel (SCENARIOS row 74, by quarter, all scenarios): CPI y/y gets FUEL_W × (fuel price y/y of the
-previous quarter − its 2011–2025 average FUEL_NORM); the average is already in the CPI equations.
+Since 2026-10-24 quarterly CPI is built from NBU blocks (cpi_blocks): tariffs enter administered
+prices and fuel is its own block. CPI_SPEED (inertia towards the annual B3 model) and fuel() with
+FUEL_W/FUEL_NORM stay on COEFS for reference but are not used in the sheet.
 TARIFF_W, MET_C and MET_X now come from the long history (estimated() below); MET_B stays
 calibrated (the post-invasion fit is not significant).
 """

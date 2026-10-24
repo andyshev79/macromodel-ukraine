@@ -2,7 +2,7 @@
 
 Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators). The model links
 are written by b1_payload (manufacturing, mining), b2_payload (exports) and
-scenarios_q_payload (CPI in ANCHORS row 10). SCENARIOS needs at least 63 rows.
+cpi_blocks_payload (CPI by NBU blocks, B3_PRICES section 4). SCENARIOS needs at least 63 rows.
 """
 import json
 import sys
@@ -19,7 +19,8 @@ def coef_row(k, v, block, note):
         return [f"SHOCK_{k}", block, "SHOCK", k, round(v, 2), round(se, 2), round(v / se, 1), "2011–2025",
                 quarterly.METHOD, "", "2026-10-23",
                 "Инерция инфляции: доля разрыва между прошлым кварталом и годовой моделью B3, закрываемая за квартал. "
-                "Оценка: ИПЦ г/г на курс, зарплату и ИПЦ прошлого квартала (1 − коэффициент при нём). Тарифы добавляются сразу"]
+                "Оценка: ИПЦ г/г на курс, зарплату и ИПЦ прошлого квартала (1 − коэффициент при нём). "
+                "Не используется с 2026-10-24: ИПЦ считается по блокам НБУ (COEFS 108–126)"]
     if k in EST:
         v, se, period, method, note = EST[k]
         return [f"SHOCK_{k}", block, "SHOCK", k, round(v, 2), round(se, 2) if se else "", round(v / se, 1) if se else "",
@@ -49,16 +50,16 @@ out[f"COEFS!A{FUEL_COEF_ROW}:L{FUEL_NORM_ROW}"] = [
      quarterly.METHOD, round(F["r2"], 2), "2026-10-24",
      "ИПЦ г/г на курс, зарплату и цены топлива прошлого квартала (ИПЦ: топливо и масла): +10 п.п. к росту цен топлива "
      "дают +1 п.п. к ИПЦ через квартал. Через продукты: " + f"{F['food']:.2f}".replace(".", ",")
-     + f" (t {F['food'] / F['food_se']:.1f})".replace(".", ",") + " — дорогое топливо для аграриев и перевозок"],
+     + f" (t {F['food'] / F['food_se']:.1f})".replace(".", ",") + " — дорогое топливо для аграриев и перевозок. Не используется с 2026-10-24: топливо — блок ИПЦ (COEFS 108–126)"],
     ["SHOCK_FUEL_NORM", "B3", "SHOCK", "FUEL_NORM", round(F["norm"], 1), "", "", "2011–2025", "расчёт по данным", "", "2026-10-24",
-     "Средний рост цен топлива 2011–2025 без 2022Q1–2023Q1, % г/г: он уже в уравнениях ИПЦ, шок — только отклонение от него"],
+     "Средний рост цен топлива 2011–2025 без 2022Q1–2023Q1, % г/г. Не используется с 2026-10-24 (ИПЦ по блокам НБУ)"],
 ]
-fuel_path = [round(F["q3"], 1), 40, 25, 12] + [10] * 6
+fuel_path = [round(F["q3"], 1)] + [""] * 9  # later quarters: the fuel equation in B3_PRICES row 45
 out[f"SCENARIOS!A{FUEL_ROW - 1}:L{FUEL_ROW + 1}"] = [
     ["Цены топлива (для всех сценариев)", "Единицы"] + [f"={c}38" for c in "CDEFGHIJKL"],
     ["Топливо: бензин, дизель, газ для авто (ИПЦ «топливо и масла»)", "% г/г, конец квартала"] + fuel_path,
-    [f"Как считается: ИПЦ г/г квартала + COEFS!E{FUEL_COEF_ROW} × (рост цен топлива прошлого квартала − COEFS!E{FUEL_NORM_ROW}). "
-     f"2026Q3 — факт Госстата; дальше оценка Claude (топливо дорожает с начала 2026, база сравнения растёт). Пустой квартал = без шока."],
+    ["Как считается: блок «топливо» в B3_PRICES, строка 45. 2026Q3 — факт НБУ. Пустой квартал = уравнение 3,61 + 0,46 × рост нефти Brent "
+     "(строка 78) + 1,04 × девальвация. Число в квартале заменяет уравнение (ручной шок)."],
 ]
 if "--coefs" in sys.argv:  # SCENARIOS rows hold the user's shock inputs: rewrite only on a fresh frame
     out = {k: v for k, v in out.items() if k.startswith("COEFS")}
