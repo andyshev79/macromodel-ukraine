@@ -74,6 +74,7 @@ def build() -> dict:
                         if isinstance(right, str) and "COEFS!" in right:
                             out[ref] = [[v]]
     out.update(payload("shocks", "--coefs"))
+    out.update(payload("cpi_blocks", "--coefs"))
     out.update(payload("quality"))
     # facts: anchors with data in the history file; cells the blocks fill (estimates, formulas) are skipped
     a = pd.read_csv(ROOT / "data" / "history" / "anchors_q.csv", index_col=0)
