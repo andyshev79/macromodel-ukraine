@@ -93,7 +93,7 @@ def test_labour_quarterly():
     assert s["LF"]["3"] > s["LF"]["1"] and s["U"]["3"] < 0 < s["U"]["1"]  # farm work in summer
     assert L.min_wage_q()["2024Q2"] == 8000 and L.min_wage_q()["2026Q1"] == 8647
     rows = L.coef_rows()
-    assert L.COEF_FIRST + len(rows) - 1 == 163
+    assert L.COEF_FIRST + len(rows) - 1 == 166  # MIL_ rows 164-166
 
 
 def test_wage_nowcast():
@@ -138,3 +138,16 @@ def test_fuel_shock():
     assert 0.03 < f["coef"] < 0.2 and f["coef"] / f["se"] >= 1.96
     assert f["food"] / f["food_se"] >= 1.96
     assert 5 < f["norm"] < 25 and f["last"] > 20
+
+
+def test_military_block():
+    p = payload("b4_payload")
+    b4 = p["B4_LABOUR!A1:T94"]
+    r = {row[0]: i + 1 for i, row in enumerate(b4) if row and row[0]}
+    lf = b4[r["LF_SA"] - 1]
+    assert f"*J{r['DEMOB']}" in lf[9]  # demobilised return to the labour force
+    assert f"J{r['MIL_N']}/F{r['MIL_N']}" in b4[r["MIL_FUND"] - 1][9]  # fund follows headcount
+    assert f"J{r['MIL_G']}" in b4[r["PUB_G"] - 1][9]  # wage equation sees pay rates; the fund goes to income
+    assert "MIL_FUND" in str(b4[r["MIL_REAL"] - 1]) or f"{r['MIL_FUND']}" in b4[r["MIL_REAL"] - 1][4]
+    sc = p["SCENARIOS!A80:O118"]
+    assert sc[-1][0].startswith("Как считается") and sc[-6][0] == "Численность военных — активный"
