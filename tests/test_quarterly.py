@@ -178,7 +178,22 @@ def test_peace_gov_imports():
 def test_construction_reconstruction():
     p = payload("b1_payload")
     f = p["B1_REAL!A17:G29"][6]
-    assert f[0] == "GVA_F" and "COEFS!$E$171*SCENARIOS!M124" in f[5]
+    assert f[0] == "GVA_F" and f[5] == "=B9_CONSTRUCTION!F26"
+
+
+def test_construction_block():
+    from macromodel.blocks.construction import coef_rows, fact_ytd, history
+    p = payload("b9_payload")
+    t = p["B9_CONSTRUCTION!A1:H36"]
+    assert [r[0] for r in t[21:26]] == ["F_CIVIL", "F_INFRA", "F_FORT", "CONSTR", "GVA_F"]
+    assert t[24][4].startswith(f"=({fact_ytd()['months']}*E19+")  # 2026 anchored to the monthly facts
+    assert "COEFS!$E$171*F13" in t[22][5] and "SCENARIOS!M131" in t[14][5]
+    c = {r["code"]: r["coef"] for r in coef_rows()}
+    assert abs(c["F_W_CIVIL"] + c["F_W_INFRA"] + c["F_W_FORT"] - 1) < 1e-9
+    assert c["F_CIVIL_HH"] > 0 and 0.5 < c["F_LINK_CONSTR"] < 1.2
+    h = history()
+    assert h["lo"] < 0 < h["hi"] and 20 < h["gfcf_usd"] < 80
+    assert -30 < fact_ytd()["yoy"] < 30
 
 
 def test_manufacturing_blocks():
