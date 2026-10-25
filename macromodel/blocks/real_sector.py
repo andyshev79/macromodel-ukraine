@@ -200,3 +200,61 @@ def coef_table() -> list[dict]:
                          "se": round(r["se"][var], 2), "r2": round(r["r2"], 2), "n": r["n"],
                          "method": "оценка МНК 2016–2025, годовые, дамми 2022", "note": ""})
     return rows
+
+
+# Manufacturing by blocks (2026-10-25): metallurgy, food, machinery with defence industry, other.
+# Weights come from the Ukrstat production indices (IND_C ~ sum of branch indices, 2023-2025 structure);
+# each block has its own driver; GVA_C follows the bottom-up index, the old C equation stays as a top-down check.
+C_BLOCKS = {"MET": "IND_C8", "FOOD": "IND_C1", "MACH": "IND_C9", "OTH": ("IND_C4", "IND_C5", "IND_C7")}
+OPK_SH = 0.3  # defence industry in the machinery block: Claude estimate, Ukrstat indices do not show it
+C_W_FIRST = "2023Q1"
+
+
+def manuf_data() -> pd.DataFrame:
+    from macromodel import quarterly as Q
+    d = Q.long_quarterly()
+    q = Q.data()
+    for b, src in C_BLOCKS.items():
+        q[b] = d[[f"{s}_YOY" for s in src]].mean(axis=1) if isinstance(src, tuple) else d[f"{src}_YOY"]
+    q["IND_C"] = d["IND_C_YOY"]
+    q["GFCF"] = d["GDPE_GFCF_YOY"]
+    return q
+
+
+def manuf_blocks() -> dict:
+    from macromodel import quarterly as Q
+    q = manuf_data()
+    x = q[["IND_C", "FOOD", "MET", "MACH", "OTH"]].loc[C_W_FIRST:Q.LAST].dropna()
+    rel = ["FOOD", "MET", "MACH"]
+    b, *_ = np.linalg.lstsq((x[rel].values - x[["OTH"]].values), x["IND_C"].values - x["OTH"].values, rcond=None)
+    w = dict(zip(rel, b)) | {"OTH": 1 - b.sum()}
+    eqs = {"FOOD": ["HH"], "MACH": ["GFCF"], "OTH": ["HH"]}
+    fits = {k: Q.ols_nw(s[k], s[r]) | {"first": s.index[0]} for k, r in eqs.items() for s in [Q.sample(q, k, r)]}
+    s = Q.sample(q, "GVA_C", ["IND_C"])
+    fits["LINK"] = Q.ols_nw(s["GVA_C"], s[["IND_C"]]) | {"first": s.index[0]}
+    return {"w": w, "n_w": len(x), "fits": fits, "eqs": eqs | {"LINK": ["IND_C"]}}
+
+
+def manuf_coef_rows() -> list[dict]:
+    from macromodel import quarterly as Q
+    m = manuf_blocks()
+    names = {"MET": "металлургия", "FOOD": "пищепром", "MACH": "машиностроение", "OTH": "другое (химия, кокс, пластмассы)"}
+    rows = [{"eq": "GVA_C_W", "var": k, "coef": round(float(v), 2), "se": None, "period": f"{C_W_FIRST[:4]}–{Q.LAST[:4]}",
+             "method": "МНК квартальные, сумма весов 1", "r2": None,
+             "note": f"Вес блока «{names[k]}» в индексе переработки Госстата (структура военных лет, {m['n_w']} кв.)"}
+            for k, v in m["w"].items()]
+    notes = {"FOOD": "Пищепром от потребления домохозяйств (B2); урожай незначим",
+             "MACH": "Гражданское машиностроение от ВНОК без акселератора (константа + ставка + восстановление): "
+                     "иначе циклическая ссылка через ВВП",
+             "OTH": "Химия, кокс, пластмассы от потребления домохозяйств (B2)",
+             "LINK": "ВДС переработки от индекса производства (снизу вверх)"}
+    for k, regs in m["eqs"].items():
+        r = m["fits"][k]
+        for v in ["const"] + regs:
+            rows.append({"eq": f"GVA_C_{k}", "var": v, "coef": round(float(r["coef"][v]), 2), "se": round(float(r["se"][v]), 2),
+                         "period": f"{r['first'][:4]}–{Q.LAST[:4]}", "method": "МНК квартальные, Newey–West, без 2022Q1–2023Q1",
+                         "r2": round(r["r2"], 2), "note": notes[k] if v == "const" else ""})
+    rows.append({"eq": "GVA_C_MACH", "var": "OPK_SH", "coef": OPK_SH, "se": None, "period": "", "method": "калибровка", "r2": None,
+                 "note": "Доля ОПК в блоке машиностроения, растёт с реальными расходами на оборону. Оценка Claude: в индексе "
+                         "Госстата ОПК не виден (связь машиностроения с расходами на оборону отрицательная)"})
+    return rows
