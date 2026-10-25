@@ -13,6 +13,12 @@ Wage (OLS 2012Q1-2025Q4 without 2022Q1-2023Q1, Newey-West errors):
              + p × central budget wage bill y/y + u × y/y change in unemployment
 Okun by quarter: y/y change in unemployment = const + b × real GDP y/y (2012-2025, with the NBU
 annual estimates of unemployment for 2022-2025 in all their quarters).
+
+December premium: Gosstat counts pay accrued in the month, so December carries annual bonuses,
+the "13th salary" and aid on top of the usual wage. Its size changes from year to year (11-21%
+of the November-January trend), and the y/y forecast would repeat last year's size. The premium
+is measured from monthly wages (data/external/wage_m.csv) and set by scenario for 2026-2028; the
+Q4 level moves by a third of the change, as December is one month of three.
 """
 from pathlib import Path
 
@@ -58,6 +64,35 @@ def unemployment() -> pd.Series:
         for q in "1234":
             u[f"{y}Q{q}"] = v
     return u
+
+
+def wage_m() -> pd.Series:
+    """Average monthly wage, UAH (Gosstat via MacroStat, 2010-2013 rows fixed); 2022-2023 missing."""
+    m = pd.read_csv(EXT / "wage_m.csv")
+    s = pd.Series(m["WAGE_UAH"].values, index=pd.PeriodIndex(m["month"], freq="M"))
+    return s.reindex(pd.period_range(s.index[0], s.index[-1], freq="M"))
+
+
+def dec_premium() -> pd.Series:
+    """December wage over the trend through November and January (geometric mean), % by year."""
+    s = wage_m()
+    p = {y: (s[pd.Period(f"{y}-12", "M")] / np.sqrt(s[pd.Period(f"{y}-11", "M")] * s[pd.Period(f"{y + 1}-01", "M")]) - 1) * 100
+         for y in range(s.index[0].year, s.index[-1].year) if pd.Period(f"{y + 1}-01", "M") in s.index}
+    return pd.Series(p).dropna()
+
+
+def dec_drivers() -> dict:
+    """Averages by period and the slope on nominal GDP growth (OLS on years with both)."""
+    p = dec_premium()
+    d = Q.long_quarterly()
+    gn = d["GDP_NOM"].groupby(d.index.str[:4]).sum(min_count=4)
+    gn.index = gn.index.astype(int)
+    g = (gn / gn.shift() - 1) * 100
+    df = pd.concat([p.rename("P"), g.rename("G")], axis=1).replace([np.inf, -np.inf], np.nan).dropna()
+    fit = Q.ols_nw(df["P"], df[["G"]])
+    span = lambda a, b: float(p.loc[a:b].mean())
+    return {"pre": span(2006, 2015), "mid": span(2016, 2021), "war": span(2024, 2030), "last": float(p.iloc[-1]),
+            "last_year": int(p.index[-1]), "fit": fit, "n": len(df)}
 
 
 def data() -> pd.DataFrame:
@@ -136,6 +171,17 @@ def coef_rows() -> list[dict]:
         rows += [{"eq": f"SEAS_{k}", "var": f"Q{q}", "coef": float(s[k][q]), "se": None, "r2": None, "n": 0,
                   "period": "2011–2021" if k != "WAGE" else "2011–2025", "method": "расчёт по данным", "note": seas_note[k]}
                  for q in "1234"]
+    dd = dec_drivers()
+    f = dd["fit"]
+    dec_note = "Декабрьская премия: декабрь к тренду ноябрь–январь, %, помесячная зарплата Госстата"
+    rows += [{"eq": "DEC", "var": v, "coef": c, "se": None, "r2": None, "n": 0, "period": per, "method": "расчёт по данным",
+              "note": f"{dec_note}; {txt}"} for v, c, per, txt in [
+        ("AVG_PRE", dd["pre"], "2006–2015", "до реформы ЕСВ (2016) и войны"),
+        ("AVG_MID", dd["mid"], "2016–2021", "после снижения ЕСВ до 22%: премии легализованы"),
+        ("AVG_WAR", dd["war"], "2024–2025", "война: премии меньше; 2022–2023 помесячных данных нет")]]
+    rows.append({"eq": "DEC", "var": "GDPN", "coef": f["coef"]["G"], "se": f["se"]["G"], "r2": f["r2"], "n": dd["n"],
+                 "period": "2011–2025", "method": "МНК, ошибки Ньюи–Уэста",
+                 "note": f"{dec_note}; на 1 п.п. роста номинального ВВП (прибыли → премии). Слабая связь, для сценариев"})
     return rows
 
 
@@ -144,3 +190,6 @@ if __name__ == "__main__":
         print(name, {k: (round(v, 3), round(v / r["se"][k], 1)) for k, v in r["coef"].items()}, "R2", round(r["r2"], 2), "n", r["n"])
     print({k: v.round(3).to_dict() for k, v in seasonal().items()})
     print(retro().round(1))
+    print(dec_premium().round(1).to_dict())
+    dd = dec_drivers()
+    print({k: v for k, v in dd.items() if k != "fit"}, dd["fit"]["coef"], dd["fit"]["r2"])
