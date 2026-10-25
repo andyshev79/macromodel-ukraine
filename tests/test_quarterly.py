@@ -1,3 +1,5 @@
+import pandas as pd
+
 from macromodel import quarterly
 
 
@@ -64,6 +66,9 @@ def test_b4_wage_links():
     # quarter columns D:S = 2025Q1..2028Q4; the forecast wage is the same quarter a year before x (1 + growth)
     assert rows[code["WAGE"] - 1][9] == f"=F{code['WAGE']}*(1+J{code['NW_F']}/100)"
     assert out["ANCHORS!BB20:BK20"][0][0] == f"=B4_LABOUR!J{code['WAGE']}"
+    # Q4 also moves by a third of the change in the December premium
+    assert rows[code["WAGE"] - 1][10] == (f"=G{code['WAGE']}*(1+K{code['NW_F']}/100)"
+                                          f"*(1+K{code['DEC_P']}/300)/(1+G{code['DEC_P']}/300)")
     lean = json.loads(subprocess.run([sys.executable, "sheet/b4_payload.py", "--coefs"], capture_output=True, text=True, check=True, env=env).stdout)
     assert not any(k.startswith("SCENARIOS") for k in lean)
 
@@ -81,7 +86,17 @@ def test_labour_quarterly():
     assert s["LF"]["3"] > s["LF"]["1"] and s["U"]["3"] < 0 < s["U"]["1"]  # farm work in summer
     assert L.min_wage_q()["2024Q2"] == 8000 and L.min_wage_q()["2026Q1"] == 8647
     rows = L.coef_rows()
-    assert L.COEF_FIRST + len(rows) - 1 == 146
+    assert L.COEF_FIRST + len(rows) - 1 == 150
+
+
+def test_december_premium():
+    from macromodel.blocks import labour_q as L
+    w = L.wage_m()
+    assert w[pd.Period("2010-01", "M")] < w[pd.Period("2009-12", "M")]  # MacroStat 2010-2013 rows fixed
+    p = L.dec_premium()
+    assert p.between(8, 25).all() and p[2021] > 20 and 2022 not in p.index
+    d = L.dec_drivers()
+    assert d["mid"] > d["pre"] > d["war"] and d["fit"]["coef"]["G"] > 0
 
 
 def test_fuel_shock():

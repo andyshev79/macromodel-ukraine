@@ -73,10 +73,10 @@ qn = lambda c: QS[COLS.index(c)][-1]
 
 # SCENARIOS rows: quarterly labour targets, 3 scenarios + active each
 SQ_FIRST = 80
-PARAMS = ["MINW", "MIL", "CIV", "MIGR", "MOB", "GUEST"]
+PARAMS = ["MINW", "MIL", "CIV", "MIGR", "MOB", "GUEST", "DEC"]
 SROW = {p: SQ_FIRST + 2 + 4 * i for i, p in enumerate(PARAMS)}  # first (Base) row of each parameter
 ACT = {p: SROW[p] + 3 for p in PARAMS}
-SQ_LAST = SROW["GUEST"] + 4  # note row
+SQ_LAST = SROW["DEC"] + 4  # note row
 
 x = L.data()
 mq = L.min_wage_q()
@@ -85,6 +85,7 @@ hist_minw = [float(mq[q]) for q in QS[:FACT]]
 HIST_MIL = [0, 0, 0, 0, 0, 0]  # % raise in quarter, 2025Q1..2026Q2: base pay unchanged in 2026 (checked 2026-10-25)
 HIST_CIV = [0, 0, 0, 0, 22, 0]  # 2026Q1: teachers +30%, social workers ×2.5 base, doctors to 35k (checked 2026-10-25)
 U25 = UNEMP_EST["2025"]
+DEC = L.dec_drivers()
 SEAS = lambda k, c: QC(f"SEAS_{k}", f"Q{qn(c)}")
 
 H = ["Код", "Показатель", "Уравнение / единицы"] + QS + ["Комментарий"]
@@ -108,8 +109,8 @@ def line(code, name, eq, f, comment="", cols=COLS):
 add("4. Рынок труда по кварталам")
 add("")
 add("Что считает", "Рабочая сила, безработица и занятость с сезонностью; зарплата по факторам; производительность")
-add("Берёт", "ANCHORS (ВВП, ИПЦ, факт зарплат), SCENARIOS (строки 80–105: минимальная зарплата, повышения военным и "
-             "бюджетникам, миграция, мобилизация по кварталам; строки 32–33, 71), COEFS (WQ_, UQ_, SEAS_)")
+add("Берёт", f"ANCHORS (ВВП, ИПЦ, факт зарплат), SCENARIOS (строки {SQ_FIRST}–{SQ_LAST - 1}: минимальная зарплата, повышения военным и "
+             "бюджетникам, миграция, мобилизация по кварталам, декабрьская премия; строки 32–33, 71), COEFS (WQ_, UQ_, SEAS_, DEC_)")
 add("Пишет", "ANCHORS: EMPL, UNEMP, WAGE_NOM по кварталам; годовые итоги (раздел 4) — в B2 (доходы), B3 (зарплата), B8 (занятость)")
 add("Статус", "версия 2 (2026-10-25): кварталы")
 add("Как читать", "Каждый квартал сравнивается с тем же кварталом прошлого года (г/г); уровень = тот же квартал прошлого "
@@ -184,9 +185,15 @@ line("NW_F", "Рост номинальной зарплаты по фактор
      lambda c: f"={QC('WQ', 'const')}+{QC('WQ', 'CPI_L')}*{c}{r['CPI_L']}+{QC('WQ', 'MINW')}*{c}{r['MINW_G']}"
                f"+{QC('WQ', 'PUB')}*{c}{r['PUB_G']}+{QC('WQ', 'DU')}*{c}{r['DU_W']}+{c}{r['DESH']}",
      "% г/г; 2026Q1–Q2 — проверка модели на факте", nf)
-line("WAGE", "Средняя номинальная зарплата", "факт; дальше тот же квартал прошлого года × (1 + рост)",
-     lambda c: f"=ANCHORS!{ANCH[COLS.index(c)]}20" if COLS.index(c) < FACT else f"={prev(c, 4)}{len(rows) + 1}*(1+{c}{r['NW_F']}/100)",
-     "грн в месяц; идёт в ANCHORS, строка 20")
+line("DEC_P", "Декабрьская премия", "декабрь к тренду ноябрь–январь, %",
+     lambda c: round(DEC["last"], 1) if c == "G" else f"=SCENARIOS!{SCQ[c]}{ACT['DEC']}",
+     f"премии, «13-я зарплата», помощь; {DEC['last_year']} — факт; дальше SCENARIOS. История: COEFS DEC_",
+     [c for c in COLS[3:] if qn(c) == "4"])
+dec_adj = lambda c: f"*(1+{c}{r['DEC_P']}/300)/(1+{prev(c, 4)}{r['DEC_P']}/300)" if qn(c) == "4" else ""
+line("WAGE", "Средняя номинальная зарплата", "факт; дальше тот же квартал прошлого года × (1 + рост); 4 кв. × смена премии / 3",
+     lambda c: f"=ANCHORS!{ANCH[COLS.index(c)]}20" if COLS.index(c) < FACT else
+     f"={prev(c, 4)}{len(rows) + 1}*(1+{c}{r['NW_F']}/100){dec_adj(c)}",
+     "грн в месяц; идёт в ANCHORS, строка 20. Декабрь — треть 4 кв., поэтому премия двигает квартал на треть")
 line("WAGE_G", "Рост номинальной зарплаты", "% г/г",
      lambda c: f"=({c}{r['WAGE']}/ANCHORS!{ANCH4[COLS.index(c)]}20-1)*100" if year(c) == "2025" else
      f"=({c}{r['WAGE']}/{prev(c, 4)}{r['WAGE']}-1)*100", "с учётом факта")
@@ -241,6 +248,7 @@ ANN = {"Base": dict(zip(["2026", "2027", "2028"], "CDE")), "Pess": dict(zip(["20
        "Opt": dict(zip(["2026", "2027", "2028"], "IJK"))}
 choose = lambda p: [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{c}{SROW[p]};{c}{SROW[p] + 1};{c}{SROW[p] + 2})" for c in "CDEFGHIJKL"]
 minw = [8647, 8647] + [9546] * 4 + [10377] * 4
+q4 = lambda a, b, c: ["", a, "", "", "", b, "", "", "", c]  # 2026Q4, 2027Q4, 2028Q4
 spec = {
     "MINW": ("Минимальная зарплата", "грн в месяц, средняя за квартал", [minw, minw, minw],
              "Закон о госбюджете 2026 (8647 с 1 января); 2027–2028 — Бюджетная декларация 2027–2029, с 1 января. "
@@ -254,6 +262,11 @@ spec = {
     "MIGR": ("Чистая миграция украинцев", "тыс. человек за квартал", None, "По умолчанию годовая (строка 22) / 4; можно задать числом"),
     "MOB": ("Мобилизация (чистый отток)", "тыс. человек за квартал", None, "По умолчанию годовая (строка 23) / 4; можно задать числом"),
     "GUEST": ("Чистый приток иностранных рабочих", "тыс. человек за квартал", None, "По умолчанию годовая (строка 31) / 4"),
+    "DEC": ("Декабрьская премия", "% к тренду ноябрь–январь, только 4 кв.",
+            [q4(12.4, 12.4, 12.4), q4(12.0, 11.0, 11.0), q4(12.4, 14.0, 15.5)],
+            f"История (COEFS DEC_): {num(DEC['pre'], 1)} в 2006–2015, {num(DEC['mid'], 1)} в 2016–2021, "
+            f"{num(DEC['war'], 1)} в 2024–2025. База — уровень войны; пессим. — меньше прибыли; "
+            f"оптим. — возврат к довоенным 16 по мере восстановления. Оценка Claude"),
 }
 annual_row = {"MIGR": 22, "MOB": 23, "GUEST": 31}
 srows = [["Рынок труда по кварталам: бюджетные ориентиры и потоки людей (B4_LABOUR)"],
@@ -266,7 +279,7 @@ for p in PARAMS:
     srows.append([f"{name} — активный", unit] + choose(p))
 srows.append(["Как считается: B4_LABOUR сравнивает квартал с тем же кварталом прошлого года. Повышение — % к уровню прошлого "
               "квартала в среднем за квартал (повышение с 1 сентября даёт треть в 3 кв., остальное в 4 кв.). "
-              "Годовые строки 68–70 не используются с 2026-10-25."])
+              "Декабрьская премия меняет 4 кв. на треть своего изменения. Годовые строки 68–70 не используются с 2026-10-25."])
 out[f"SCENARIOS!A{SQ_FIRST}:O{SQ_FIRST + len(srows) - 1}"] = srows
 if "--coefs" in sys.argv:
     out = {k: v for k, v in out.items() if not k.startswith("SCENARIOS")}
