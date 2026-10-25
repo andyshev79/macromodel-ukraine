@@ -151,3 +151,14 @@ def test_military_block():
     assert "MIL_FUND" in str(b4[r["MIL_REAL"] - 1]) or f"{r['MIL_FUND']}" in b4[r["MIL_REAL"] - 1][4]
     sc = next(v for k, v in p.items() if k.startswith("SCENARIOS!A80:"))
     assert sc[-1][0].startswith("Как считается") and sc[-6][0] == "Численность военных — активный"
+
+
+def test_defence_split():
+    from macromodel.blocks.real_sector import defence_share
+    assert 0.75 < defence_share() < 0.95  # military pay dominates section O in 2025
+    p = payload("b1_payload")
+    sec = p["B1_REAL!A59:H69"]
+    r = {row[0]: 59 + i for i, row in enumerate(sec) if row and row[0]}
+    assert p["B1_REAL!A17:G29"][10][4] == f"=E{r['GVA_O']}"  # row 27 takes section O from the split
+    assert "B4_LABOUR!H17:K17" in sec[r["MIL_NY"] - 59][4]  # defence follows military headcount
+    assert "ВНИМАНИЕ" in sec[r["O_CHK"] - 59][4]
