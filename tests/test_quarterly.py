@@ -173,3 +173,9 @@ def test_peace_gov_imports():
     assert 0.4 < c["GDPE_GOV_O_SH"] < 0.7 and 0.05 < c["GDPE_IMP_DEF_SH"] < 0.25
     assert "COEFS!$E$170*COEFS!$E$30" in p["B2_DEMAND!BB37"][0][0]  # stock draw when ports reopen
     assert 0.4 < p["COEFS!A168:L170"][2][4] < 0.8
+
+
+def test_construction_reconstruction():
+    p = payload("b1_payload")
+    f = p["B1_REAL!A17:G29"][6]
+    assert f[0] == "GVA_F" and "COEFS!$E$171*SCENARIOS!M124" in f[5]
