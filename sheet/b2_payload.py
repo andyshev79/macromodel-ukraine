@@ -97,6 +97,9 @@ out[f"COEFS!A{PEACE_COEF_FIRST}:L{PEACE_COEF_FIRST + len(pc) - 1}"] = [
 P = lambda eq, v: f"COEFS!$E${prow[(eq, v)]}"
 pnum = lambda eq, v: f"{next(r['coef'] for r in pc if (r['eq'], r['var']) == (eq, v)):.2f}".replace(".", ",")
 
+from macromodel.blocks.agro import ROW as AGRO_ROW, coef_rows as agro_coefs
+AGRO_SH = f"COEFS!$E${AGRO_ROW['A_AGRO_SH']}"
+AGRO_SH_TXT = f"{next(r['coef'] for r in agro_coefs() if r['code'] == 'A_AGRO_SH'):.2f}".replace(".", ",")
 kv = lambda c, v: f"{next(r['coef'] for r in coefs if (r['eq'], r['var']) == (f'GDPE_{c}', v)):.2f}".replace(".", ",").replace("-", "−")
 eqs = {
     "HH": (f"{kv('HH', 'const')} + {kv('HH', 'REAL_WAGE')} × рост реальных трудовых доходов + влияние ставки (B7) + эффект мира",
@@ -107,14 +110,15 @@ eqs = {
                          f"({C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15)"),
     "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7) + восстановление",
              lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40+SCENARIOS!{ACT_C[c]}{PEACE_ROW + 1}"),
-    "EXP": ("−3,1 + 0,28 × рост портов + " + f"{estimated()['MET_X'][0]:.2f}".replace(".", ",") + " × изменение загрузки металлургии",
-            lambda c, p: f"={C('EXP','const')}+{C('EXP','PORTS')}*({c}$12/{p}$12-1)*100"
-                         f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16)"),
+    "EXP": (f"агро ({AGRO_SH_TXT}) × реальный агроэкспорт B10 + остальное × (−3,1 + 0,28 × рост портов + "
+            + f"{estimated()['MET_X'][0]:.2f}".replace(".", ",") + " × изменение загрузки металлургии)",
+            lambda c, p: f"={AGRO_SH}*B10_AGRO!{c}41+(1-{AGRO_SH})*({C('EXP','const')}+{C('EXP','PORTS')}*({c}$12/{p}$12-1)*100"
+                         f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16))"),
     "IMP": (f"оборонный ({pnum('GDPE_IMP', 'DEF_SH')}) × рост реальных расходов на оборону + гражданский × "
             f"({kv('IMP', 'const')} + {kv('IMP', 'DOM_DEMAND')} × рост внутреннего спроса)",
             lambda c, p: f"={P('GDPE_IMP','DEF_SH')}*{c}$15+(1-{P('GDPE_IMP','DEF_SH')})*"
                          f"({C('IMP','const')}+{C('IMP','DOM_DEMAND')}*{c}$16)"),
-    "INV": ("растут вместе с ВВП по производству; в кварталах (раздел 3) минус вывоз из запасов при открытии портов",
+    "INV": ("растут вместе с ВВП по производству; в кварталах (раздел 3) плюс зерно, которое не вывезли порты (B10_AGRO строка 42)",
             lambda c, p: f"={C('INV','GDP_P')}*{c}$11"),
 }
 names = {k: v[1] for k, v in COMPONENTS.items()} | {"INV": "Запасы и статистическое расхождение"}
@@ -141,10 +145,10 @@ out["B2_DEMAND!A29:H38"] = hdr
 quarters = [f"{y}Q{q}" for y in range(2015, 2027) for q in range(1, 5)][:46]
 out["B2_DEMAND!H32:BA37"] = [[round(float(lv.loc[q, c]), 1) for q in quarters] for c in codes]
 out["B2_DEMAND!BB32"] = [["=AX32*(1+INDEX($E20:$G20;MATCH(BB$30;$E$19:$G$19;0))/100)"]]
-# inventories: the agro part of the port-driven export change comes from (or goes to) stocks
+# inventories: grain that the ports cannot ship stays in stocks (B10_AGRO row 42), shipped stocks leave them
 yr = lambda r, cols="$E${r}:$G${r}": f"INDEX({cols.format(r=r)};MATCH(BB$30;$E$19:$G$19;0))"
-out["B2_DEMAND!BB37"] = [[f"=AX37*(1+{yr(25)}/100)-{P('GDPE_INV','STK')}*{C('EXP','PORTS')}"
-                          f"*({yr(12)}/{yr(12, '$D${r}:$F${r}')}-1)*AX35"]]
+out["B2_DEMAND!BB37"] = [[f"=AX37*(1+{yr(25)}/100)+{AGRO_SH}*INDEX(B10_AGRO!$E$42:$G$42;MATCH(BB$30;B10_AGRO!$E$10:$G$10;0))"
+                          f"/100*AX35"]]
 
 con = [["4. Вклад компонентов в рост ВВП, п.п. г/г"], ["Код", "Компонент", "", "", "", "", "", "=H31"]]
 for c in codes:
