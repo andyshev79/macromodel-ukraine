@@ -78,6 +78,11 @@ out["B1_REAL!A16:H16"] = [["MET", "Металлургия: загрузка мо
 MET = lambda s, c, p: f"+COEFS!$E${SHOCK_ROW['MET_' + s]}*({c}$16-{p}$16)"
 
 g = annual_growth(real_levels_q())
+F_REC_ROW = 171  # after B2 peace rows 168-170
+ACT = dict(zip("EFG", "LMN"))  # active-scenario columns in SCENARIOS
+out[f"COEFS!A{F_REC_ROW}:L{F_REC_ROW}"] = [["GVA_F_REC", "B1", "GVA_F", "REC", 1.0, "", "", "", "калибровка", "", "2026-10-25",
+    "Восстановление: строительство растёт на те же п.п., что ВНОК (SCENARIOS строка 124). Строительство — около "
+    "половины ВНОК; машины и оборудование в основном импорт. Оценка Claude"]]
 O_CODES = ["MIL_NY", "ADM_N", "DEF_G", "ADM_G", "DEF_NOM_G", "ADM_NOM_G", "DEF_SH", "GVA_O", "O_CHK"]
 O_ROW = {k: 61 + i for i, k in enumerate(O_CODES)}
 eq = {
@@ -88,7 +93,8 @@ eq = {
           f"+ {met['MET_C']} × изменение загрузки металлургии",
           lambda c, p: f"={C('C','const')}+{C('C','HH')}*B2_DEMAND!{c}$20+{C('C','CAP')}*({c}$13/{p}$13-1)*100{MET('C', c, p)}"),
     "D": ("рост мощности (эластичность 1)", lambda c, p: f"={C('D','const')}+{C('D','CAP')}*({c}$13/{p}$13-1)*100"),
-    "F": ("тренд 2024–2025 + влияние ставки (B7)", lambda c, p: f"={C('F','const')}+B7_MONETARY!{c}41"),
+    "F": ("тренд 2024–2025 + влияние ставки (B7) + восстановление после войны (SCENARIOS строка 124)",
+          lambda c, p: f"={C('F','const')}+B7_MONETARY!{c}41+COEFS!$E${F_REC_ROW}*SCENARIOS!{ACT[c]}124"),
     "G": ("константа (до связки с потреблением B2)", lambda c, p: f"={C('G','const')}"),
     "H": ("−0,55 + 0,22 × рост портов", lambda c, p: f"={C('H','const')}+{C('H','PORTS')}*({c}$12/{p}$12-1)*100"),
     "J": ("тренд 2024–2025", lambda c, p: f"={C('J','const')}"),
