@@ -19,6 +19,11 @@ the "13th salary" and aid on top of the usual wage. Its size changes from year t
 of the November-January trend), and the y/y forecast would repeat last year's size. The premium
 is measured from monthly wages (data/external/wage_m.csv) and set by scenario for 2026-2028; the
 Q4 level moves by a third of the change, as December is one month of three.
+
+Nowcast and error carry-over: when the last quarter has one or two months of fact, the missing
+months take the median change of that calendar month, so the quarter rests on the fact rather than
+the equation. The equation's error in that quarter (fact y/y − model y/y) carries into later
+quarters and fades by the AR(1) coefficient of the residuals each quarter.
 """
 from pathlib import Path
 
@@ -79,6 +84,47 @@ def dec_premium() -> pd.Series:
     p = {y: (s[pd.Period(f"{y}-12", "M")] / np.sqrt(s[pd.Period(f"{y}-11", "M")] * s[pd.Period(f"{y + 1}-01", "M")]) - 1) * 100
          for y in range(s.index[0].year, s.index[-1].year) if pd.Period(f"{y + 1}-01", "M") in s.index}
     return pd.Series(p).dropna()
+
+
+def month_change() -> pd.Series:
+    """Median month-on-month wage change by calendar month (1-12), %, over all years with data."""
+    s = wage_m()
+    mm = (s / s.shift() - 1) * 100
+    return mm.groupby(mm.index.month).median()
+
+
+def nowcast() -> dict | None:
+    """Average wage of the last quarter that has only one or two months of fact; the missing months
+    take the median change of their calendar month."""
+    s = wage_m().dropna()
+    last = s.index[-1]
+    if last.month % 3 == 0:
+        return None
+    ch = month_change()
+    months = [p for p in pd.period_range(last.asfreq("Q").asfreq("M", "s"), last.asfreq("Q").asfreq("M", "e"), freq="M")]
+    vals, v = [], None
+    for p in months:
+        v = s[p] if p in s.index else v * (1 + ch[p.month] / 100)
+        vals.append(v)
+    return {"q": str(last.asfreq("Q")), "value": float(np.mean(vals)), "fact_months": [str(p) for p in months if p in s.index],
+            "filled": {str(p): round(float(ch[p.month]), 2) for p in months if p not in s.index}}
+
+
+def qq_corridor() -> pd.DataFrame:
+    """Wage change on the previous quarter by quarter 1-4, %: 10th percentile, median, 90th percentile
+    over 2011-2025 without 2022Q1-2023Q1. A forecast outside the corridor needs an explanation."""
+    d = Q.long_quarterly()["WAGE_NOM"]
+    qq = ((d / d.shift() - 1) * 100).loc["2011Q1":LAST].drop(index=Q.WAR, errors="ignore").dropna()
+    g = qq.groupby(qq.index.str[-1])
+    return pd.DataFrame({"LO": g.quantile(0.1), "MED": g.median(), "HI": g.quantile(0.9)})
+
+
+def residual_rho() -> float:
+    """AR(1) coefficient of the quarterly wage equation residuals (quarters in the sample in a row)."""
+    x, r = data(), wage_estimate()
+    df = x[["WAGE"] + WAGE_REGS].loc[FIRST:LAST].drop(index=Q.WAR, errors="ignore").dropna()
+    res = (df["WAGE"] - r["coef"]["const"] - sum(r["coef"][k] * df[k] for k in WAGE_REGS)).reindex(x.loc[FIRST:LAST].index)
+    return float(res.autocorr(1))
 
 
 def dec_drivers() -> dict:
@@ -182,6 +228,14 @@ def coef_rows() -> list[dict]:
     rows.append({"eq": "DEC", "var": "GDPN", "coef": f["coef"]["G"], "se": f["se"]["G"], "r2": f["r2"], "n": dd["n"],
                  "period": "2011–2025", "method": "МНК, ошибки Ньюи–Уэста",
                  "note": f"{dec_note}; на 1 п.п. роста номинального ВВП (прибыли → премии). Слабая связь, для сценариев"})
+    rows.append({"eq": "WQ", "var": "RHO", "coef": residual_rho(), "se": None, "r2": None, "n": w["n"], "period": "2012–2025",
+                 "method": "автокорреляция остатков", "note": "Ошибка уравнения зарплат в последнем факте переносится "
+                 "на следующие кварталы с затуханием: × этот коэффициент каждый квартал"})
+    qc = qq_corridor()
+    what = {"LO": "нижняя граница (10%)", "MED": "медиана", "HI": "верхняя граница (90%)"}
+    rows += [{"eq": "QQW", "var": f"{k}_Q{q}", "coef": float(qc.loc[q, k]), "se": None, "r2": None, "n": 0, "period": "2011–2025",
+              "method": "расчёт по данным", "note": f"Зарплата, % к прошлому кварталу, {q} кв.: {what[k]} без 2022Q1–2023Q1. "
+              "Коридор для проверки логики на B4_LABOUR"} for k in ["LO", "MED", "HI"] for q in "1234"]
     return rows
 
 
@@ -193,3 +247,4 @@ if __name__ == "__main__":
     print(dec_premium().round(1).to_dict())
     dd = dec_drivers()
     print({k: v for k, v in dd.items() if k != "fit"}, dd["fit"]["coef"], dd["fit"]["r2"])
+    print(nowcast(), round(residual_rho(), 2))

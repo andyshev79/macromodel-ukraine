@@ -1,3 +1,8 @@
+import json
+import os
+import subprocess
+import sys
+
 import pandas as pd
 
 from macromodel import quarterly
@@ -64,10 +69,12 @@ def test_b4_wage_links():
     assert out["B2_DEMAND!E14:H14"][0][0] == f"=B4_LABOUR!E{code['INCOME']}"
     assert out["B8_CAPACITY!E12:G12"][0][0] == f"=B4_LABOUR!E{code['Y_EMPL_G']}"
     # quarter columns D:S = 2025Q1..2028Q4; the forecast wage is the same quarter a year before x (1 + growth)
-    assert rows[code["WAGE"] - 1][9] == f"=F{code['WAGE']}*(1+J{code['NW_F']}/100)"
+    # 2026Q3 (column J): July-August fact, September from its median change
+    assert isinstance(rows[code["WAGE"] - 1][9], float)
+    assert rows[code["ADJ"] - 1][9] == f"=J{code['WAGE_G']}-J{code['NW_F']}"
     assert out["ANCHORS!BB20:BK20"][0][0] == f"=B4_LABOUR!J{code['WAGE']}"
     # Q4 also moves by a third of the change in the December premium
-    assert rows[code["WAGE"] - 1][10] == (f"=G{code['WAGE']}*(1+K{code['NW_F']}/100)"
+    assert rows[code["WAGE"] - 1][10] == (f"=G{code['WAGE']}*(1+(K{code['NW_F']}+K{code['ADJ']})/100)"
                                           f"*(1+K{code['DEC_P']}/300)/(1+G{code['DEC_P']}/300)")
     lean = json.loads(subprocess.run([sys.executable, "sheet/b4_payload.py", "--coefs"], capture_output=True, text=True, check=True, env=env).stdout)
     assert not any(k.startswith("SCENARIOS") for k in lean)
@@ -86,7 +93,33 @@ def test_labour_quarterly():
     assert s["LF"]["3"] > s["LF"]["1"] and s["U"]["3"] < 0 < s["U"]["1"]  # farm work in summer
     assert L.min_wage_q()["2024Q2"] == 8000 and L.min_wage_q()["2026Q1"] == 8647
     rows = L.coef_rows()
-    assert L.COEF_FIRST + len(rows) - 1 == 150
+    assert L.COEF_FIRST + len(rows) - 1 == 163
+
+
+def test_wage_nowcast():
+    from macromodel.blocks import labour_q as L
+    n = L.nowcast()
+    assert n["q"] == "2026Q3" and n["fact_months"] == ["2026-07", "2026-08"]
+    assert 1 < n["filled"]["2026-09"] < 4  # September usually adds about 2%
+    assert 32000 < n["value"] < 32600
+    assert 0.3 < L.residual_rho() < 0.8
+
+
+def payload(name):
+    env = {**os.environ, "PYTHONPATH": "."}
+    return json.loads(subprocess.run([sys.executable, f"sheet/{name}.py"], capture_output=True, text=True, check=True, env=env).stdout)
+
+
+def test_wage_logic_check():
+    from macromodel.blocks import labour_q as L
+    c = L.qq_corridor()
+    assert (c["LO"] < c["MED"]).all() and (c["MED"] < c["HI"]).all()
+    assert c.loc["1", "HI"] < c.loc["4", "LO"] + 1  # Q1 falls back after the December peak
+    out = payload("b4_payload")
+    rows = out[next(k for k in out if k.startswith("B4_LABOUR"))]
+    code = {r[0]: i + 1 for i, r in enumerate(rows) if r and r[0]}
+    assert code["WHY"] > code["QQ_CHK"] > code["INCOME"]  # appended: annual rows keep their numbers
+    assert out["CHECKS!A33:Q35"][1][-1] == f'=COUNTIF(B4_LABOUR!P{code["QQ_CHK"]}:S{code["QQ_CHK"]};"ВНИМАНИЕ")'
 
 
 def test_december_premium():
