@@ -145,6 +145,8 @@ def peace_coefs(year="2025") -> list[dict]:
     d = quarterly().loc[f"{year}Q1":f"{year}Q4"]
     o_sh = d["GVA_O_NOM"].sum() / d["GDPE_GEN_GOV_NOM"].sum()
     non_pay = d["CB_EXP_DEFENCE"].sum() - d["CB_EXP_WAGES"].sum() * W["MIL_CB"][0] * (1 + ESV)
+    goods = d[[c for c in d.columns if c.startswith("EXPG_")]].sum().sum()
+    agro_sh = d["EXPG_AGRO_USD"].sum() / goods
     imp_sh = non_pay * DEF_IMP_PART / -d["GDPE_IGS_NOM"].sum()
     return [
         {"eq": "GDPE_GOV", "var": "O_SH", "coef": round(float(o_sh), 2), "method": "расчёт 2025",
@@ -153,4 +155,7 @@ def peace_coefs(year="2025") -> list[dict]:
         {"eq": "GDPE_IMP", "var": "DEF_SH", "coef": round(float(imp_sh), 2), "method": "расчёт 2025 + оценка",
          "note": f"Оборонный импорт в импорте: (расходы на оборону − довольствие с ЕСВ) × {DEF_IMP_PART:.0%} импортной части "
                  "(оценка Claude) / импорт. Идёт за реальными расходами на оборону; оружие от партнёров в G и M не входит"},
+        {"eq": "GDPE_INV", "var": "STK", "coef": round(float(agro_sh), 2), "method": "расчёт 2025",
+         "note": "Доля агро в экспорте товаров: эта часть экспорта, зависящего от портов, идёт из запасов. Урожай уже в ВДС "
+                 "сельского хозяйства; закрытие портов копит запасы, открытие — вывозит их без роста ВДС"},
     ]

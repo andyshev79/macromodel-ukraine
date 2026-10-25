@@ -114,7 +114,8 @@ eqs = {
             f"({kv('IMP', 'const')} + {kv('IMP', 'DOM_DEMAND')} × рост внутреннего спроса)",
             lambda c, p: f"={P('GDPE_IMP','DEF_SH')}*{c}$15+(1-{P('GDPE_IMP','DEF_SH')})*"
                          f"({C('IMP','const')}+{C('IMP','DOM_DEMAND')}*{c}$16)"),
-    "INV": ("растут вместе с ВВП по производству", lambda c, p: f"={C('INV','GDP_P')}*{c}$11"),
+    "INV": ("растут вместе с ВВП по производству; в кварталах (раздел 3) минус вывоз из запасов при открытии портов",
+            lambda c, p: f"={C('INV','GDP_P')}*{c}$11"),
 }
 names = {k: v[1] for k, v in COMPONENTS.items()} | {"INV": "Запасы и статистическое расхождение"}
 rows = [["2. Рост реальных компонентов, % г/г"], ["Код", "Компонент", "Уравнение", 2025, 2026, 2027, 2028]]
@@ -140,6 +141,10 @@ out["B2_DEMAND!A29:H38"] = hdr
 quarters = [f"{y}Q{q}" for y in range(2015, 2027) for q in range(1, 5)][:46]
 out["B2_DEMAND!H32:BA37"] = [[round(float(lv.loc[q, c]), 1) for q in quarters] for c in codes]
 out["B2_DEMAND!BB32"] = [["=AX32*(1+INDEX($E20:$G20;MATCH(BB$30;$E$19:$G$19;0))/100)"]]
+# inventories: the agro part of the port-driven export change comes from (or goes to) stocks
+yr = lambda r, cols="$E${r}:$G${r}": f"INDEX({cols.format(r=r)};MATCH(BB$30;$E$19:$G$19;0))"
+out["B2_DEMAND!BB37"] = [[f"=AX37*(1+{yr(25)}/100)-{P('GDPE_INV','STK')}*{C('EXP','PORTS')}"
+                          f"*({yr(12)}/{yr(12, '$D${r}:$F${r}')}-1)*AX35"]]
 
 con = [["4. Вклад компонентов в рост ВВП, п.п. г/г"], ["Код", "Компонент", "", "", "", "", "", "=H31"]]
 for c in codes:
