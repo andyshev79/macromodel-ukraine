@@ -203,3 +203,28 @@ def surveys_m(p: Path) -> pd.DataFrame:
             continue
         out[pd.Period(r[0], "M")] = {k: float(r[j]) if isinstance(r[j], (int, float)) else None for k, j in cols.items()}
     return pd.DataFrame.from_dict(out, orient="index", dtype=float).sort_index()
+
+
+# KVED sections in Wages_m / Number_m (labels in the second column; KVED 2005 for 2010-2012)
+KVED_SECTIONS = {"O": "Державне управління", "P": "Освіта", "Q": "Охорона здоров"}
+
+
+def by_section_m(p: Path) -> pd.DataFrame:
+    """Levels for the whole economy (TOTAL) and sections O, P, Q, monthly from 2010.
+    Sheet "1" holds KVED 2010 from 2013, sheet "2" KVED 2005 for 2010-2012; in both the
+    first row under the month header is the total and sections follow by name."""
+    wb = openpyxl.load_workbook(p, read_only=True, data_only=True)
+    out: dict[str, dict] = {}
+    for name in ["2", "1"]:
+        rows = list(wb[name].iter_rows(values_only=True))
+        hi = next(i for i, r in enumerate(rows) if sum(isinstance(v, datetime) for v in r) >= 3)
+        cols = {j: pd.Period(v, "M") for j, v in enumerate(rows[hi]) if isinstance(v, datetime)}
+        picks = {"TOTAL": rows[hi + 1]}
+        for k, lab in KVED_SECTIONS.items():
+            picks[k] = next(r for r in rows[hi + 1:] if isinstance(r[1], str) and r[1].strip().startswith(lab))
+        for k, r in picks.items():
+            for j, per in cols.items():
+                if j < len(r) and isinstance(r[j], (int, float)):
+                    out.setdefault(k, {})[per] = float(r[j])
+    wb.close()
+    return pd.DataFrame(out).sort_index()
