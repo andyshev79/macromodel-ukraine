@@ -161,6 +161,21 @@ def debt_schedule_y(path: Path) -> pd.DataFrame:
             start = js[-1]
             out[key] = {int(h): _num(_cell(r, j)) for j, h in enumerate(head)
                         if j > start and isinstance(h, (int, float)) and 2000 < h < 2100}
+    # external debt split: the first "Обслуговування" / "Погашення" rows after "Зовнішній борг"
+    ext = False
+    for r in rows[hi + 1:]:
+        js = [j for j, v in enumerate(r) if isinstance(v, str) and v.strip()]
+        if not js:
+            continue
+        lab = next((r[j].strip() for j in reversed(js) if isinstance(r[j], str)), "")
+        if lab == "Зовнішній борг":
+            ext = True
+            continue
+        key = {"Обслуговування": "external_interest", "Погашення": "external_repayment"}.get(lab)
+        if ext and key and key not in out:
+            j0 = max(j for j, v in enumerate(r) if isinstance(v, str) and v.strip() == lab)
+            out[key] = {int(h): _num(_cell(r, j)) for j, h in enumerate(head)
+                        if j > j0 and isinstance(h, (int, float)) and 2000 < h < 2100}
     df = pd.DataFrame(out)
     df.index.name = "year"
     return df.sort_index()
