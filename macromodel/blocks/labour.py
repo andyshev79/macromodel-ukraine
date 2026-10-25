@@ -11,7 +11,7 @@ import pandas as pd
 from macromodel.blocks.real_sector import ols, quarterly
 
 UNEMP_EST = {"2022": 21.0, "2023": 17.0, "2024": 13.5, "2025": 11.5}
-LF_2025 = 13500.0  # labour force on controlled territory, thousand; rough estimate, to verify
+LF_2025 = 13500.0  # labour force on controlled territory, thousand; no official figure since the 2021 survey (checked 2026-10-25); NBU IR Oct 2025 implies roughly 15 mn
 
 CALIBRATED = {
     ("LF", "MIGR"): (0.6, "Не используется: доля задаётся по годам в SCENARIOS строка 32"),
