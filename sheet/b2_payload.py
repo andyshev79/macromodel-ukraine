@@ -53,7 +53,7 @@ top = [
     ["PORTS", "Пропускная способность портов", "млн т", "=B1_REAL!D12", "=B1_REAL!E12", "=B1_REAL!F12", "=B1_REAL!G12", "из B1_REAL"],
     ["DEF", "Расходы на оборону", "% ВВП", "=B1_REAL!D15", "=B1_REAL!E15", "=B1_REAL!F15", "=B1_REAL!G15", "из B1_REAL"],
     ["REAL_WAGE", "Рост реальной зарплаты", "%", round(float(x["REAL_WAGE"]), 1)]
-    + [f"=B4_LABOUR!{c}31" for c in "EFG"] + ["из B4_LABOUR (с учётом факта)"],
+    + [f"=B4_LABOUR!{c}31" for c in "EFG"] + ["из B4_LABOUR (с учётом факта)"],  # B4 payload rewrites this row
     ["REAL_DEF", "Рост реальных расходов на оборону", "%", round(float(x["REAL_DEF"]), 1)]
     + [f"=({c}13/{p}13)*(1+{c}11/100)*100-100" for c, p in zip("EFG", "DEF")] + ["доля в ВВП × реальный ВВП"],
 ]
@@ -63,13 +63,39 @@ dom = [f"=({sumif(c + '$10-1', 32)}*(1+{c}20/100)+{sumif(c + '$10-1', 33)}*(1+{c
 top.append(["DOM_DEMAND", "Рост внутреннего спроса (C + G + I)", "%", round(float(x["DOM_DEMAND"]), 1)] + dom + ["взвешенный рост компонентов"])
 out["B2_DEMAND!A1:H16"] = top
 
+# Peace effect after a ceasefire, annual, per scenario (SCENARIOS rows PEACE_ROW..; active columns L:N)
+PEACE_FIRST = 120
+PEACE_ROW = PEACE_FIRST + 3
+ACT_C = dict(zip("EFG", "LMN"))
+PEACE = [
+    ("Эффект мира: снижение нормы сбережений", "п.п. к росту потребления домохозяйств",
+     [0, 4, 3, 0, 0, 3, 0, 5, 3],
+     "Оценка Claude. Во время войны семьи копят про запас; после прекращения огня тратят больше. "
+     "Год прекращения огня и следующий (строка 16)"),
+    ("Эффект мира: восстановление", "п.п. к росту инвестиций (ВНОК)",
+     [0, 15, 10, 0, 0, 10, 5, 20, 15],
+     "Оценка Claude. Проекты восстановления на средства партнёров и страхование военных рисков: "
+     "+10–20% ВНОК ≈ 4–8 млрд USD в год при потребности около 50 млрд USD в год (оценка RDNA4)"),
+]
+out[f"SCENARIOS!A{PEACE_FIRST}:O{PEACE_FIRST + 5}"] = [
+    ["Эффект мира после прекращения огня (B2_DEMAND)"],
+    ["Параметр", "Единицы", "База", "", "", "Пессимистичный", "", "", "Оптимистичный", "", "", "Активный"],
+    ["", "", 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028],
+] + [[name, unit] + v + [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a};{b};{c})"
+                        for a, b, c in [(f"C{PEACE_FIRST + 3 + k}", f"F{PEACE_FIRST + 3 + k}", f"I{PEACE_FIRST + 3 + k}"),
+                                        (f"D{PEACE_FIRST + 3 + k}", f"G{PEACE_FIRST + 3 + k}", f"J{PEACE_FIRST + 3 + k}"),
+                                        (f"E{PEACE_FIRST + 3 + k}", f"H{PEACE_FIRST + 3 + k}", f"K{PEACE_FIRST + 3 + k}")]] + [src]
+     for k, (name, unit, v, src) in enumerate(PEACE)] + [
+    ["Как считается: добавка к уравнениям потребления и ВНОК в B2_DEMAND в годы после прекращения огня. "
+     "Смягчает падение доходов военных (B4_LABOUR, MIL_C), которое модель считает отдельно."]]
+
 kv = lambda c, v: f"{next(r['coef'] for r in coefs if (r['eq'], r['var']) == (f'GDPE_{c}', v)):.2f}".replace(".", ",").replace("-", "−")
 eqs = {
-    "HH": (f"{kv('HH', 'const')} + {kv('HH', 'REAL_WAGE')} × рост реальной зарплаты + влияние ставки (B7)",
-           lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14+B7_MONETARY!{c}39"),
+    "HH": (f"{kv('HH', 'const')} + {kv('HH', 'REAL_WAGE')} × рост реальных трудовых доходов + влияние ставки (B7) + эффект мира",
+           lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14+B7_MONETARY!{c}39+SCENARIOS!{ACT_C[c]}{PEACE_ROW}"),
     "GOV": ("−1,24 + 0,17 × рост реальных расходов на оборону", lambda c, p: f"={C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15"),
-    "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7)",
-             lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40"),
+    "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7) + восстановление",
+             lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40+SCENARIOS!{ACT_C[c]}{PEACE_ROW + 1}"),
     "EXP": ("−3,1 + 0,28 × рост портов + " + f"{estimated()['MET_X'][0]:.2f}".replace(".", ",") + " × изменение загрузки металлургии",
             lambda c, p: f"={C('EXP','const')}+{C('EXP','PORTS')}*({c}$12/{p}$12-1)*100"
                          f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16)"),
