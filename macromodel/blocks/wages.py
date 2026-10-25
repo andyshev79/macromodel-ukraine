@@ -1,5 +1,8 @@
 """Block B4, wages: nominal wage growth from its factors instead of 'real wage + last year's CPI'.
 
+Since 2026-10-25 the sheet uses the quarterly version (labour_q); this annual fit stays for
+MODEL_QUALITY and as a cross-check, and MIL_CB / MIL_HH below are still used.
+
 Annual equation, OLS 2016–2025 without 2022 (one-off: wage fund of the army, collapse of GDP):
   wage growth = const + a × CPI last year + b × minimum wage growth + p × growth of the
                 central budget wage bill + u × change in unemployment

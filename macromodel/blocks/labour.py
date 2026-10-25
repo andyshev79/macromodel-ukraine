@@ -4,6 +4,7 @@ The labour force survey stopped after 2021, so unemployment for 2022-2025 is
 taken from NBU estimates (UNEMP_EST, to verify). Okun's law is estimated on
 2016-2025: the change in unemployment on real GDP growth. Labour supply shocks
 (migration, mobilization) and the real wage rule are calibrated.
+Since 2026-10-25 the sheet runs Okun by quarter (labour_q); U_SUPPLY and U_MIN stay in use.
 """
 import pandas as pd
 

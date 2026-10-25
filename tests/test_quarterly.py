@@ -56,13 +56,32 @@ def test_b4_wage_links():
     import json, os, subprocess, sys
     env = {**os.environ, "PYTHONPATH": "."}
     out = json.loads(subprocess.run([sys.executable, "sheet/b4_payload.py"], capture_output=True, text=True, check=True, env=env).stdout)
-    assert out["B3_PRICES!E12:H12"][0][0] == "=B4_LABOUR!E43"
-    assert out["B2_DEMAND!E14:H14"][0][0] == "=B4_LABOUR!E46"
     rows = out[next(k for k in out if k.startswith("B4_LABOUR"))]
-    assert rows[41][0] == "NW_F" and rows[28][4] == "=E42"
-    assert rows[42][0] == "WAGE_ECON" and rows[45][0] == "INCOME"
+    code = {r[0]: i + 1 for i, r in enumerate(rows) if r and r[0]}
+    assert out["B3_PRICES!E12:H12"][0][0] == f"=B4_LABOUR!E{code['WAGE_ECON']}"
+    assert out["B2_DEMAND!E14:H14"][0][0] == f"=B4_LABOUR!E{code['INCOME']}"
+    assert out["B8_CAPACITY!E12:G12"][0][0] == f"=B4_LABOUR!E{code['Y_EMPL_G']}"
+    # quarter columns D:S = 2025Q1..2028Q4; the forecast wage is the same quarter a year before x (1 + growth)
+    assert rows[code["WAGE"] - 1][9] == f"=F{code['WAGE']}*(1+J{code['NW_F']}/100)"
+    assert out["ANCHORS!BB20:BK20"][0][0] == f"=B4_LABOUR!J{code['WAGE']}"
     lean = json.loads(subprocess.run([sys.executable, "sheet/b4_payload.py", "--coefs"], capture_output=True, text=True, check=True, env=env).stdout)
     assert not any(k.startswith("SCENARIOS") for k in lean)
+
+
+def test_labour_quarterly():
+    from macromodel.blocks import labour_q as L
+    w = L.wage_estimate()
+    t = {k: w["coef"][k] / w["se"][k] for k in w["coef"]}
+    assert w["n"] >= 45 and all(abs(t[k]) >= 1.96 for k in L.WAGE_REGS)
+    assert w["coef"]["DU"] < 0 and 0.1 < w["coef"]["MINW"] < 0.3
+    o = L.okun_estimate()
+    assert o["coef"]["GDP"] < 0
+    s = L.seasonal()
+    assert s["WAGE"]["4"] > 1 > s["WAGE"]["1"]  # December bonuses, low Q1
+    assert s["LF"]["3"] > s["LF"]["1"] and s["U"]["3"] < 0 < s["U"]["1"]  # farm work in summer
+    assert L.min_wage_q()["2024Q2"] == 8000 and L.min_wage_q()["2026Q1"] == 8647
+    rows = L.coef_rows()
+    assert L.COEF_FIRST + len(rows) - 1 == 146
 
 
 def test_fuel_shock():
