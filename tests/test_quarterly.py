@@ -161,4 +161,13 @@ def test_defence_split():
     r = {row[0]: 59 + i for i, row in enumerate(sec) if row and row[0]}
     assert p["B1_REAL!A17:G29"][10][4] == f"=E{r['GVA_O']}"  # row 27 takes section O from the split
     assert "B4_LABOUR!H17:K17" in sec[r["MIL_NY"] - 59][4]  # defence follows military headcount
-    assert "ВНИМАНИЕ" in sec[r["O_CHK"] - 59][4]
+    assert "OK: численность военных" in sec[r["O_CHK"] - 59][4]
+
+
+def test_peace_gov_imports():
+    p = payload("b2_payload")
+    rows = {r[0]: r for r in p["B2_DEMAND!A18:G27"] if r and r[0]}
+    assert "B1_REAL!F$68" in rows["GDPE_GOV"][5]  # G follows section O output in B1
+    assert "COEFS!$E$169*F$15" in rows["GDPE_IMP"][5]  # defence imports follow real defence spending
+    c = {r[0]: r[4] for r in p["COEFS!A168:L169"]}
+    assert 0.4 < c["GDPE_GOV_O_SH"] < 0.7 and 0.05 < c["GDPE_IMP_DEF_SH"] < 0.25

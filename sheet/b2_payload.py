@@ -6,7 +6,7 @@ Forecast formulas are written once (column BB) and copied right in the sheet.
 import json
 import sys
 
-from macromodel.blocks.demand import COMPONENTS, coef_table, link_other_to_consumption, real_levels_q, regressors
+from macromodel.blocks.demand import COMPONENTS, coef_table, peace_coefs, link_other_to_consumption, real_levels_q, regressors
 from macromodel.blocks.real_sector import annual_growth
 from macromodel.blocks.shocks import SHOCK_ROW, estimated
 
@@ -89,17 +89,31 @@ out[f"SCENARIOS!A{PEACE_FIRST}:O{PEACE_FIRST + 5}"] = [
     ["Как считается: добавка к уравнениям потребления и ВНОК в B2_DEMAND в годы после прекращения огня. "
      "Смягчает падение доходов военных (B4_LABOUR, MIL_C), которое модель считает отдельно."]]
 
+PEACE_COEF_FIRST = 168  # after B4 MIL_ rows 164-167
+pc = peace_coefs()
+prow = {(r["eq"], r["var"]): PEACE_COEF_FIRST + i for i, r in enumerate(pc)}
+out[f"COEFS!A{PEACE_COEF_FIRST}:L{PEACE_COEF_FIRST + len(pc) - 1}"] = [
+    [f"{r['eq']}_{r['var']}", "B2", r["eq"], r["var"], r["coef"], "", "", "", r["method"], "", "2026-10-25", r["note"]] for r in pc]
+P = lambda eq, v: f"COEFS!$E${prow[(eq, v)]}"
+pnum = lambda eq, v: f"{next(r['coef'] for r in pc if (r['eq'], r['var']) == (eq, v)):.2f}".replace(".", ",")
+
 kv = lambda c, v: f"{next(r['coef'] for r in coefs if (r['eq'], r['var']) == (f'GDPE_{c}', v)):.2f}".replace(".", ",").replace("-", "−")
 eqs = {
     "HH": (f"{kv('HH', 'const')} + {kv('HH', 'REAL_WAGE')} × рост реальных трудовых доходов + влияние ставки (B7) + эффект мира",
            lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14+B7_MONETARY!{c}39+SCENARIOS!{ACT_C[c]}{PEACE_ROW}"),
-    "GOV": ("−1,24 + 0,17 × рост реальных расходов на оборону", lambda c, p: f"={C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15"),
+    "GOV": (f"{pnum('GDPE_GOV', 'O_SH')} × раздел O из B1 (численность военных и штат) + остальное × "
+            f"({kv('GOV', 'const')} + {kv('GOV', 'REAL_DEF')} × рост реальных расходов на оборону)",
+            lambda c, p: f"={P('GDPE_GOV','O_SH')}*B1_REAL!{c}$68+(1-{P('GDPE_GOV','O_SH')})*"
+                         f"({C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15)"),
     "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7) + восстановление",
              lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40+SCENARIOS!{ACT_C[c]}{PEACE_ROW + 1}"),
     "EXP": ("−3,1 + 0,28 × рост портов + " + f"{estimated()['MET_X'][0]:.2f}".replace(".", ",") + " × изменение загрузки металлургии",
             lambda c, p: f"={C('EXP','const')}+{C('EXP','PORTS')}*({c}$12/{p}$12-1)*100"
                          f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16)"),
-    "IMP": (f"{kv('IMP', 'const')} + {kv('IMP', 'DOM_DEMAND')} × рост внутреннего спроса", lambda c, p: f"={C('IMP','const')}+{C('IMP','DOM_DEMAND')}*{c}$16"),
+    "IMP": (f"оборонный ({pnum('GDPE_IMP', 'DEF_SH')}) × рост реальных расходов на оборону + гражданский × "
+            f"({kv('IMP', 'const')} + {kv('IMP', 'DOM_DEMAND')} × рост внутреннего спроса)",
+            lambda c, p: f"={P('GDPE_IMP','DEF_SH')}*{c}$15+(1-{P('GDPE_IMP','DEF_SH')})*"
+                         f"({C('IMP','const')}+{C('IMP','DOM_DEMAND')}*{c}$16)"),
     "INV": ("растут вместе с ВВП по производству", lambda c, p: f"={C('INV','GDP_P')}*{c}$11"),
 }
 names = {k: v[1] for k, v in COMPONENTS.items()} | {"INV": "Запасы и статистическое расхождение"}
