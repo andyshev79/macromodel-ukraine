@@ -168,10 +168,11 @@ def test_peace_gov_imports():
     p = payload("b2_payload")
     rows = {r[0]: r for r in p["B2_DEMAND!A18:G27"] if r and r[0]}
     assert "B1_REAL!F$68" in rows["GDPE_GOV"][5]  # G follows section O output in B1
-    assert "COEFS!$E$169*F$15" in rows["GDPE_IMP"][5]  # defence imports follow real defence spending
+    assert "COEFS!$E$169*F$15" in rows["GDPE_IMP"][5]
+    assert rows["GDPE_EXP"][5].startswith("=COEFS!$E$196*B10_AGRO!F41+")  # agro part of exports follows B10  # defence imports follow real defence spending
     c = {r[0]: r[4] for r in p["COEFS!A168:L170"]}
     assert 0.4 < c["GDPE_GOV_O_SH"] < 0.7 and 0.05 < c["GDPE_IMP_DEF_SH"] < 0.25
-    assert "COEFS!$E$170*COEFS!$E$30" in p["B2_DEMAND!BB37"][0][0]  # stock draw when ports reopen
+    assert "B10_AGRO!$E$42:$G$42" in p["B2_DEMAND!BB37"][0][0]  # unshipped grain goes to stocks
     assert 0.4 < p["COEFS!A168:L170"][2][4] < 0.8
 
 
@@ -206,3 +207,19 @@ def test_manufacturing_blocks():
     r = {row[0]: 71 + i for i, row in enumerate(sec) if row and row[0]}
     assert p["B1_REAL!A17:G29"][4][5] == f"=F{r['GVA_C_BU']}"  # row 21 takes the bottom-up block sum
     assert "B2_DEMAND" not in sec[r["C_OPK"] - 71][5]  # no loop through GDP of the same year
+
+
+def test_agro_block():
+    from macromodel.blocks.agro import ROW, coef_rows, crops, history
+    p = payload("b10_payload")
+    t = p["B10_AGRO!A1:I50"]
+    assert [r[0] for r in t[18:26]] == ["WHEAT", "CORN", "BARLEY", "SUNFLOWER", "SOY", "RAPESEED", "HARVEST", "HARVEST_G"]
+    assert t[18][5].endswith(f"*(1+COEFS!$E${ROW['A_SHIFT_WHEAT']}/100)")  # wheat area cut for the 2027 crop
+    assert [r[0] for r in t[29:42]][-1] == "STOCK_D" and t[38][0] == "AGRO_EXP"
+    assert "MIN(F33;F34)" in t[34][5]  # exports limited by ports and land routes
+    c = crops()
+    assert 70 < c.sum()["2025"] < 85 and set(c.index) == {"WHEAT", "CORN", "BARLEY", "SUNFLOWER", "SOY", "RAPESEED"}
+    h = history()
+    assert 0.3 < h["agro_sh"] < 0.6 and 5 < h["sigma"] < 20 and h["h1_now"] > 0
+    b1 = payload("b1_payload")["B1_REAL!A1:H15"]
+    assert b1[10][0] == "HARVEST" and b1[10][4] == "=B10_AGRO!E25"

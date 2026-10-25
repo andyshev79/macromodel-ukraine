@@ -62,14 +62,15 @@ text = [
     ["Код", "Показатель", "Единицы", 2025, 2026, 2027, 2028, "Источник 2025"],
 ]
 drv = [
-    ("HARVEST", "Урожай зерновых и масличных", "млн т", 80, 24, "УЗА"),
+    ("HARVEST", "Урожай шести основных культур", "млн т", "=B10_AGRO!D25", None, "B10_AGRO строка 25 (по культурам)"),
     ("PORTS", "Пропускная способность портов", "млн т в год", 82.2, 19, "USPA"),
     ("CAP", "Доступная мощность энергосистемы в пик", "ГВт", 15, 18, "DiXi: перед зимой 2024/25 больше 15 ГВт"),
     ("EA_GDP", "Рост ВВП еврозоны", "%", 1.4, 28, "Eurostat, приблизительно"),
     ("DEF", "Расходы на оборону", "% ВВП", 34.4, 21, "Казначейство (функция 0200) / ВВП"),
 ]
 for code, name, unit, v25, srow, src in drv:
-    text.append([code, name, unit, v25] + [f"=SCENARIOS!{c}{srow}" for c in "LMN"] + [src])
+    text.append([code, name, unit, v25] + [f"=B10_AGRO!{c}25" if srow is None else f"=SCENARIOS!{a}{srow}"
+                                           for c, a in zip("EFG", "LMN")] + [src])
 out["B1_REAL!A1:H15"] = text
 # metallurgy utilisation (sheet.shocks_payload). The shock is elasticity × change in utilisation in points
 # of 2025 output: a restart from a low base (15 -> 50) adds 35% of the 2025 output, not +233%
