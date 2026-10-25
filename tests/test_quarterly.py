@@ -179,3 +179,15 @@ def test_construction_reconstruction():
     p = payload("b1_payload")
     f = p["B1_REAL!A17:G29"][6]
     assert f[0] == "GVA_F" and "COEFS!$E$171*SCENARIOS!M124" in f[5]
+
+
+def test_manufacturing_blocks():
+    from macromodel.blocks.real_sector import manuf_blocks
+    m = manuf_blocks()
+    assert abs(sum(m["w"].values()) - 1) < 1e-9 and all(v > 0 for v in m["w"].values())
+    assert m["fits"]["MACH"]["coef"]["GFCF"] > 0 and m["fits"]["LINK"]["r2"] > 0.9
+    p = payload("b1_payload")
+    sec = p["B1_REAL!A71:H82"]
+    r = {row[0]: 71 + i for i, row in enumerate(sec) if row and row[0]}
+    assert p["B1_REAL!A17:G29"][4][5] == f"=F{r['GVA_C_BU']}"  # row 21 takes the bottom-up block sum
+    assert "B2_DEMAND" not in sec[r["C_OPK"] - 71][5]  # no loop through GDP of the same year

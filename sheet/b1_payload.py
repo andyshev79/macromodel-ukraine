@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from macromodel.blocks.real_sector import SECTORS, annual_growth, coef_table, real_levels_q
+from macromodel.blocks.real_sector import SECTORS, annual_growth, coef_table, manuf_coef_rows, manuf_data, real_levels_q
 from macromodel.blocks.shocks import SHOCK_ROW, SHOCKS, estimated
 
 QUARTERS = [f"{y}Q{q}" for y in range(2015, 2029) for q in range(1, 5)]
@@ -80,6 +80,8 @@ MET = lambda s, c, p: f"+COEFS!$E${SHOCK_ROW['MET_' + s]}*({c}$16-{p}$16)"
 g = annual_growth(real_levels_q())
 F_REC_ROW = 171  # after B2 peace rows 168-170
 ACT = dict(zip("EFG", "LMN"))  # active-scenario columns in SCENARIOS
+CB_CODES = ["C_MET", "C_FOOD", "C_MACH_CIV", "C_OPK", "C_MACH", "C_OTH", "IND_C_BU", "GVA_C_BU", "GVA_C_TD", "C_CHK"]
+CB_ROW = {k: 73 + i for i, k in enumerate(CB_CODES)}
 out[f"COEFS!A{F_REC_ROW}:L{F_REC_ROW}"] = [["GVA_F_REC", "B1", "GVA_F", "REC", 1.0, "", "", "", "калибровка", "", "2026-10-25",
     "Восстановление: строительство растёт на те же п.п., что ВНОК (SCENARIOS строка 124). Строительство — около "
     "половины ВНОК; машины и оборудование в основном импорт. Оценка Claude"]]
@@ -89,9 +91,8 @@ eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
     "B": (f"{kv('B','const')} + {kv('B','PORTS')} × рост портов + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
           lambda c, p: f"={C('B','const')}+{C('B','PORTS')}*({c}$12/{p}$12-1)*100+{C('B','CAP')}*({c}$13/{p}$13-1)*100{MET('B', c, p)}"),
-    "C": (f"{kv('C','const')} + {kv('C','HH')} × рост потребления домохозяйств (B2) + {kv('C','CAP')} × рост мощности "
-          f"+ {met['MET_C']} × изменение загрузки металлургии",
-          lambda c, p: f"={C('C','const')}+{C('C','HH')}*B2_DEMAND!{c}$20+{C('C','CAP')}*({c}$13/{p}$13-1)*100{MET('C', c, p)}"),
+    "C": ("снизу вверх: 4 блока (металлургия, пищепром, машиностроение с ОПК, другое), раздел 6",
+          lambda c, p: f"={c}{CB_ROW['GVA_C_BU']}"),
     "D": ("рост мощности (эластичность 1)", lambda c, p: f"={C('D','const')}+{C('D','CAP')}*({c}$13/{p}$13-1)*100"),
     "F": ("тренд 2024–2025 + влияние ставки (B7) + восстановление после войны (SCENARIOS строка 124)",
           lambda c, p: f"={C('F','const')}+B7_MONETARY!{c}41+COEFS!$E${F_REC_ROW}*SCENARIOS!{ACT[c]}124"),
@@ -192,5 +193,54 @@ sec = [["5. Госуправление и оборона (раздел O): об�
         "ВНИМАНИЕ, только если вне коридора и госуправление"]]
 assert len(sec) == O_ROW["O_CHK"] - 58
 out[f"B1_REAL!A59:H{O_ROW['O_CHK']}"] = sec
+
+# 6. Manufacturing by blocks (bottom-up) with the old equation as a top-down check
+MC_FIRST = 172  # after GVA_F_REC (171)
+mc = manuf_coef_rows()
+mrow = {(r["eq"], r["var"]): MC_FIRST + i for i, r in enumerate(mc)}
+out[f"COEFS!A{MC_FIRST}:L{MC_FIRST + len(mc) - 1}"] = [
+    [f"{r['eq']}_{r['var']}", "B1", r["eq"], r["var"], float(r["coef"]), "" if r["se"] is None else float(r["se"]),
+     "" if not r["se"] else round(float(r["coef"]) / float(r["se"]), 1), r["period"], r["method"],
+     "" if r["r2"] is None else float(r["r2"]), "2026-10-25", r["note"]] for r in mc]
+M = lambda eq, v: f"COEFS!$E${mrow[(eq, v)]}"
+mv = lambda eq, v: num(next(r["coef"] for r in mc if (r["eq"], r["var"]) == (eq, v)))
+md = manuf_data().loc["2025Q1":"2025Q4"]
+h25 = lambda k: round(float(md[k].mean()), 1)
+R = CB_ROW
+gfcf_x = lambda c: f"(COEFS!$E$27+B7_MONETARY!{c}40+SCENARIOS!{ACT[c]}124)"
+cb = [["6. Переработка по блокам: снизу вверх, сверка с уравнением сверху"],
+      ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
+      ["C_MET", "Металлургия: выпуск", "изменение загрузки мощностей (строка 16), % г/г", h25("MET")] +
+      [f"=({c}$16/{pc[c]}$16-1)*100" for c in "EFG"] + ["сценарий SCENARIOS (отраслевые шоки)"],
+      ["C_FOOD", "Пищепром", f"{mv('GVA_C_FOOD','const')} + {mv('GVA_C_FOOD','HH')} × рост потребления домохозяйств (B2)", h25("FOOD")] +
+      [f"={M('GVA_C_FOOD','const')}+{M('GVA_C_FOOD','HH')}*B2_DEMAND!{c}$20" for c in "EFG"] + ["урожай незначим: сырьё есть всегда, ограничение — спрос"],
+      ["C_MACH_CIV", "Машиностроение гражданское", f"{mv('GVA_C_MACH','const')} + {mv('GVA_C_MACH','GFCF')} × рост ВНОК без акселератора", h25("MACH")] +
+      [f"={M('GVA_C_MACH','const')}+{M('GVA_C_MACH','GFCF')}*{gfcf_x(c)}" for c in "EFG"] +
+      ["ВНОК = константа + ставка (B7) + восстановление; акселератор по ВВП убран, иначе циклическая ссылка"],
+      ["C_OPK", "ОПК", "рост реальных расходов на оборону: доля в ВВП (строка 15) × рост ВВП прошлого года", ""] +
+      [f"=({c}$15/{pc[c]}$15)*(1+{pc[c]}$29/100)*100-100" for c in "EFG"] +
+      ["в мирном сценарии падает вместе с оборонными расходами; ВВП прошлого года — иначе циклическая ссылка"],
+      ["C_MACH", "Машиностроение с ОПК", f"доля ОПК {mv('GVA_C_MACH','OPK_SH')} (оценка) × ОПК + остальное × гражданское", ""] +
+      [f"={M('GVA_C_MACH','OPK_SH')}*{c}{R['C_OPK']}+(1-{M('GVA_C_MACH','OPK_SH')})*{c}{R['C_MACH_CIV']}" for c in "EFG"] +
+      ["ОПК в индексе Госстата не виден: доля — допущение, можно поставить 0 в COEFS"],
+      ["C_OTH", "Другое: химия, кокс, пластмассы", f"{mv('GVA_C_OTH','const')} + {mv('GVA_C_OTH','HH')} × рост потребления домохозяйств (B2)", h25("OTH")] +
+      [f"={M('GVA_C_OTH','const')}+{M('GVA_C_OTH','HH')}*B2_DEMAND!{c}$20" for c in "EFG"] + [""],
+      ["IND_C_BU", "Индекс переработки снизу вверх", "веса: " + ", ".join(f"{n} {mv('GVA_C_W', k)}" for k, n in
+       [("FOOD", "пищепром"), ("MET", "металлургия"), ("MACH", "машиностроение"), ("OTH", "другое")]), h25("IND_C")] +
+      [f"={M('GVA_C_W','MET')}*{c}{R['C_MET']}+{M('GVA_C_W','FOOD')}*{c}{R['C_FOOD']}+{M('GVA_C_W','MACH')}*{c}{R['C_MACH']}"
+       f"+{M('GVA_C_W','OTH')}*{c}{R['C_OTH']}" for c in "EFG"] + ["веса — структура индекса Госстата 2023–2025"],
+      ["GVA_C_BU", "ВДС переработки снизу вверх", f"{mv('GVA_C_LINK','const')} + {mv('GVA_C_LINK','IND_C')} × индекс + {kv('C','CAP')} × рост мощности энергосистемы",
+       round(float(g.loc["2025", "C"]), 1)] +
+      [f"={M('GVA_C_LINK','const')}+{M('GVA_C_LINK','IND_C')}*{c}{R['IND_C_BU']}+{C('C','CAP')}*({c}$13/{pc[c]}$13-1)*100" for c in "EFG"] +
+      ["идёт в строку 21"],
+      ["GVA_C_TD", "ВДС переработки сверху вниз", f"{kv('C','const')} + {kv('C','HH')} × потребление + {kv('C','CAP')} × мощность + {met['MET_C']} × загрузка металлургии", ""] +
+      [f"={C('C','const')}+{C('C','HH')}*B2_DEMAND!{c}$20+{C('C','CAP')}*({c}$13/{pc[c]}$13-1)*100{MET('C', c, pc[c])}" for c in "EFG"] +
+      ["прежнее уравнение, оставлено для сверки"],
+      ["C_CHK", "Сверка снизу вверх и сверху вниз", "расхождение до 3 п.п. — OK", ""] +
+      [f"=IF(ABS({c}{R['GVA_C_BU']}-{c}{R['GVA_C_TD']})<=3;\"OK\";\"ВНИМАНИЕ: расхождение \"&ROUND({c}{R['GVA_C_BU']}-{c}{R['GVA_C_TD']};1)"
+       f"&\" п.п.\"&IF(ABS({c}$16-{pc[c]}$16)>10;\" (металлургия: вес в индексе {mv('GVA_C_W','MET')} против {met['MET_C']} в уравнении сверху)\";\"\"))" for c in "EFG"] +
+      ["главное различие — вес металлургии: в индексе Госстата он мал, уравнение сверху ловит и смежные отрасли"]]
+assert len(cb) == R["C_CHK"] - 70
+out[f"B1_REAL!A71:H{R['C_CHK']}"] = cb
 
 json.dump(out, sys.stdout, ensure_ascii=False)
