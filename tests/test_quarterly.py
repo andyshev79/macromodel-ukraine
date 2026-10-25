@@ -169,5 +169,7 @@ def test_peace_gov_imports():
     rows = {r[0]: r for r in p["B2_DEMAND!A18:G27"] if r and r[0]}
     assert "B1_REAL!F$68" in rows["GDPE_GOV"][5]  # G follows section O output in B1
     assert "COEFS!$E$169*F$15" in rows["GDPE_IMP"][5]  # defence imports follow real defence spending
-    c = {r[0]: r[4] for r in p["COEFS!A168:L169"]}
+    c = {r[0]: r[4] for r in p["COEFS!A168:L170"]}
     assert 0.4 < c["GDPE_GOV_O_SH"] < 0.7 and 0.05 < c["GDPE_IMP_DEF_SH"] < 0.25
+    assert "COEFS!$E$170*COEFS!$E$30" in p["B2_DEMAND!BB37"][0][0]  # stock draw when ports reopen
+    assert 0.4 < p["COEFS!A168:L170"][2][4] < 0.8
