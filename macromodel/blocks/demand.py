@@ -132,3 +132,25 @@ def link_other_to_consumption(first="2016", last="2025") -> dict:
     x = pd.concat([annual_growth(real_levels_q())["HH"], regressors()["WAR22"]], axis=1)
     df = pd.concat([y.rename("OTHER"), x], axis=1).loc[first:last].dropna()
     return ols(df["OTHER"], df[["HH", "WAR22"]])
+
+
+# Peace transition (2026-10-25). Government consumption is mostly non-market output: its section O part
+# follows B1 (military headcount, civil staff); defence purchases abroad are in both G and imports.
+DEF_IMP_PART = 0.4  # imported part of non-pay defence spending: Claude estimate, partner-donated arms are outside G and M
+
+
+def peace_coefs(year="2025") -> list[dict]:
+    from macromodel.blocks.real_sector import ESV, quarterly
+    from macromodel.blocks.wages import CALIBRATED as W
+    d = quarterly().loc[f"{year}Q1":f"{year}Q4"]
+    o_sh = d["GVA_O_NOM"].sum() / d["GDPE_GEN_GOV_NOM"].sum()
+    non_pay = d["CB_EXP_DEFENCE"].sum() - d["CB_EXP_WAGES"].sum() * W["MIL_CB"][0] * (1 + ESV)
+    imp_sh = non_pay * DEF_IMP_PART / -d["GDPE_IGS_NOM"].sum()
+    return [
+        {"eq": "GDPE_GOV", "var": "O_SH", "coef": round(float(o_sh), 2), "method": "расчёт 2025",
+         "note": "Доля ВДС раздела O (оборона и госуправление) в потреблении госуправления: эта часть G идёт за B1 "
+                 "(численность военных и штат), остальное — по уравнению от реальных расходов на оборону"},
+        {"eq": "GDPE_IMP", "var": "DEF_SH", "coef": round(float(imp_sh), 2), "method": "расчёт 2025 + оценка",
+         "note": f"Оборонный импорт в импорте: (расходы на оборону − довольствие с ЕСВ) × {DEF_IMP_PART:.0%} импортной части "
+                 "(оценка Claude) / импорт. Идёт за реальными расходами на оборону; оружие от партнёров в G и M не входит"},
+    ]

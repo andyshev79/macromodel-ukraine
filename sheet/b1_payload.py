@@ -146,6 +146,7 @@ adm_months = staff.count()
 hist_o = g["O"].drop("2022").loc["2016":"2025"]
 lo, hi = round(float(hist_o.min()), 1), round(float(hist_o.max()), 1)
 r = O_ROW
+LO = num(lo).replace('−', '-')
 B4Q = {"D": ("D", "G"), "E": ("H", "K"), "F": ("L", "O"), "G": ("P", "S")}  # B4 quarter columns of each year
 q4 = lambda c, row, f="SUM": f"{f}(B4_LABOUR!{B4Q[c][0]}{row}:{B4Q[c][1]}{row})"
 pc = dict(zip("EFG", "DEF"))
@@ -179,10 +180,10 @@ sec = [["5. Госуправление и оборона (раздел O): об�
        [f"={pc[c]}{r['DEF_SH']}*{c}{r['DEF_G']}+(1-{pc[c]}{r['DEF_SH']})*{c}{r['ADM_G']}" for c in "EFG"] +
        ["идёт в строку 27; 2025 — факт Госстата"],
        ["O_CHK", "Проверка логики", f"история 2016–2025 без 2022: от {num(lo)} до {num(hi)}%", ""] +
-       [f"=IF(AND({c}{r['GVA_O']}>={num(lo).replace('−', '-')};{c}{r['GVA_O']}<={num(hi)});\"OK\";\"ВНИМАНИЕ: \"&"
-        f"IF(ABS({pc[c]}{r['DEF_SH']}*{c}{r['DEF_G']})>=ABS((1-{pc[c]}{r['DEF_SH']})*{c}{r['ADM_G']});"
-        f"\"численность военных (SCENARIOS 110–113)\";\"штат госуправления\"))" for c in "EFG"] +
-       ["демобилизация снижает ВДС обороны: это допущение сценария, а не ошибка; военные уходят в другие отрасли через рабочую силу B4"]]
+       [f"=IF(AND({c}{r['GVA_O']}>={LO};{c}{r['GVA_O']}<={num(hi)});\"OK\";IF(AND({c}{r['ADM_G']}>={LO};"
+        f"{c}{r['ADM_G']}<={num(hi)});\"OK: численность военных (сценарий)\";\"ВНИМАНИЕ: штат госуправления\"))" for c in "EFG"] +
+       ["выход за коридор, объяснённый численностью военных из сценария (демобилизация, мобилизация), — OK; "
+        "ВНИМАНИЕ, только если вне коридора и госуправление"]]
 assert len(sec) == O_ROW["O_CHK"] - 58
 out[f"B1_REAL!A59:H{O_ROW['O_CHK']}"] = sec
 
