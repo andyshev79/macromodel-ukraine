@@ -86,6 +86,9 @@ HIST_MIL = [0, 0, 0, 0, 0, 0]  # % raise in quarter, 2025Q1..2026Q2: base pay un
 HIST_CIV = [0, 0, 0, 0, 22, 0]  # 2026Q1: teachers +30%, social workers ×2.5 base, doctors to 35k (checked 2026-10-25)
 U25 = UNEMP_EST["2025"]
 DEC = L.dec_drivers()
+NOW = L.nowcast()
+NOW_C = COLS[QS.index(NOW["q"])] if NOW and NOW["q"] in QS[FACT:] else None
+ADJ_C = NOW_C or COLS[FACT - 1]  # quarter whose equation error carries forward
 SEAS = lambda k, c: QC(f"SEAS_{k}", f"Q{qn(c)}")
 
 H = ["Код", "Показатель", "Уравнение / единицы"] + QS + ["Комментарий"]
@@ -185,15 +188,21 @@ line("NW_F", "Рост номинальной зарплаты по фактор
      lambda c: f"={QC('WQ', 'const')}+{QC('WQ', 'CPI_L')}*{c}{r['CPI_L']}+{QC('WQ', 'MINW')}*{c}{r['MINW_G']}"
                f"+{QC('WQ', 'PUB')}*{c}{r['PUB_G']}+{QC('WQ', 'DU')}*{c}{r['DU_W']}+{c}{r['DESH']}",
      "% г/г; 2026Q1–Q2 — проверка модели на факте", nf)
+line("ADJ", "Поправка на ошибку уравнения", "факт г/г − по факторам; дальше × затухание",
+     lambda c: f"={c}{len(rows) + 4}-{c}{r['NW_F']}" if c == ADJ_C else f"={prev(c)}{len(rows) + 1}*{QC('WQ', 'RHO')}",
+     f"п.п.; ошибка в {QS[COLS.index(ADJ_C)]} переносится вперёд и затухает (COEFS WQ_RHO)", COLS[COLS.index(ADJ_C):])
 line("DEC_P", "Декабрьская премия", "декабрь к тренду ноябрь–январь, %",
      lambda c: round(DEC["last"], 1) if c == "G" else f"=SCENARIOS!{SCQ[c]}{ACT['DEC']}",
      f"премии, «13-я зарплата», помощь; {DEC['last_year']} — факт; дальше SCENARIOS. История: COEFS DEC_",
      [c for c in COLS[3:] if qn(c) == "4"])
 dec_adj = lambda c: f"*(1+{c}{r['DEC_P']}/300)/(1+{prev(c, 4)}{r['DEC_P']}/300)" if qn(c) == "4" else ""
 line("WAGE", "Средняя номинальная зарплата", "факт; дальше тот же квартал прошлого года × (1 + рост); 4 кв. × смена премии / 3",
-     lambda c: f"=ANCHORS!{ANCH[COLS.index(c)]}20" if COLS.index(c) < FACT else
-     f"={prev(c, 4)}{len(rows) + 1}*(1+{c}{r['NW_F']}/100){dec_adj(c)}",
-     "грн в месяц; идёт в ANCHORS, строка 20. Декабрь — треть 4 кв., поэтому премия двигает квартал на треть")
+     lambda c: f"=ANCHORS!{ANCH[COLS.index(c)]}20" if COLS.index(c) < FACT else round(NOW["value"], 1) if c == NOW_C else
+     f"={prev(c, 4)}{len(rows) + 1}*(1+({c}{r['NW_F']}+{c}{r['ADJ']})/100){dec_adj(c)}",
+     "грн в месяц; идёт в ANCHORS, строка 20. Декабрь — треть 4 кв., поэтому премия двигает квартал на треть"
+     + (f". {NOW['q']}: факт {', '.join(NOW['fact_months'])}; "
+        + ", ".join(f"{m} = прошлый месяц × (1 + {num(v, 2)}%), медиана этого месяца" for m, v in NOW["filled"].items())
+        if NOW_C else ""))
 line("WAGE_G", "Рост номинальной зарплаты", "% г/г",
      lambda c: f"=({c}{r['WAGE']}/ANCHORS!{ANCH4[COLS.index(c)]}20-1)*100" if year(c) == "2025" else
      f"=({c}{r['WAGE']}/{prev(c, 4)}{r['WAGE']}-1)*100", "с учётом факта")
@@ -231,8 +240,53 @@ yline("MIL_REAL", "Рост реального довольствия военн
 yline("INCOME", "Рост реальных трудовых доходов домохозяйств",
       f"(1 − {num(0.3, 1)}) × зарплата + {num(0.3, 1)} × довольствие военных",
       lambda i: f"=(1-{WC('MIL_HH')})*{Y[i]}{r['RW_ECON']}+{WC('MIL_HH')}*{Y[i]}{r['MIL_REAL']}", "идёт в B2 (потребление)", 1)
+add("")
+add("5. Проверка логики: зарплата к прошлому кварталу против истории")
+add(*H)
+QQ_C = COLS[COLS.index(ADJ_C) if NOW_C else FACT:]  # forecast quarters, the nowcast included
+line("QQ", "Зарплата к прошлому кварталу", "%", lambda c: f"=({c}{r['WAGE']}/{prev(c)}{r['WAGE']}-1)*100",
+     "4 кв. — премии, 1 кв. — откат, 2 кв. — отпускные и квартальные премии", COLS[1:])
+for k, name in [("LO", "Нижняя граница коридора"), ("HI", "Верхняя граница коридора")]:
+    line(f"QQ_{k}", name, f"COEFS QQW_{k}: {'10' if k == 'LO' else '90'}-й процентиль 2011–2025",
+         lambda c, k=k: f"={QC('QQW', f'{k}_Q{qn(c)}')}", "без 2022Q1–2023Q1")
+line("QQ_CHK", "Статус", "в коридоре — OK",
+     lambda c: f'=IF(AND({c}{r["QQ"]}>={c}{r["QQ_LO"]};{c}{r["QQ"]}<={c}{r["QQ_HI"]});"OK";"ВНИМАНИЕ")',
+     "ВНИМАНИЕ — нужна причина: строка «Главная причина» и разложение ниже", QQ_C)
+dq = COLS[COLS.index(QQ_C[0]) + 1:] if NOW_C else QQ_C  # quarters the equation computes
+dec_yy = lambda c: f"((1+{c}{r['DEC_P']}/300)/(1+{prev(c, 4)}{r['DEC_P']}/300)-1)*100" if qn(c) == "4" else "0"
+D = [("D_BASE", "база: тот же квартал прошлого года", "к прошлому кварталу год назад − медиана",
+      lambda c: f"={prev(c, 4)}{r['QQ']}-{QC('QQW', f'MED_Q{qn(c)}')}"),
+     ("D_CPI", "ИПЦ прошлых кварталов", "коэфф. × изменение за квартал",
+      lambda c: f"={QC('WQ', 'CPI_L')}*({c}{r['CPI_L']}-{prev(c)}{r['CPI_L']})"),
+     ("D_MINW", "минимальная зарплата", "коэфф. × изменение за квартал",
+      lambda c: f"={QC('WQ', 'MINW')}*({c}{r['MINW_G']}-{prev(c)}{r['MINW_G']})"),
+     ("D_PUB", "фонд госбюджета (военные, бюджетники)", "коэфф. × изменение за квартал",
+      lambda c: f"={QC('WQ', 'PUB')}*({c}{r['PUB_G']}-{prev(c)}{r['PUB_G']})"),
+     ("D_DU", "безработица", "коэфф. × изменение за квартал",
+      lambda c: f"={QC('WQ', 'DU')}*({c}{r['DU_W']}-{prev(c)}{r['DU_W']})"),
+     ("D_DESH", "детенизация", "изменение за квартал", lambda c: f"={c}{r['DESH']}-{prev(c)}{r['DESH']}"),
+     ("D_ADJ", "поправка на ошибку уравнения", "изменение за квартал", lambda c: f"={c}{r['ADJ']}-{prev(c)}{r['ADJ']}"),
+     ("D_DEC", "декабрьская премия", "изменение вклада в рост г/г", lambda c: f"={dec_yy(c)}-{dec_yy(prev(c))}")]
+add("", "Разложение: к прошлому кварталу ≈ медиана квартала + сумма строк ниже, п.п.")
+d0 = len(rows) + 1
+for code, name, eq, f in D:
+    line(code, name, eq, f, "", dq)
+d1 = len(rows)
+line("WHY", "Главная причина", "самая большая строка разложения по модулю",
+     lambda c: (f'=IF({c}{r["QQ_CHK"]}="OK";"";"помесячный факт")' if c == NOW_C else
+                f'=IF({c}{r["QQ_CHK"]}="OK";"";INDEX($B${d0}:$B${d1};MATCH(MAX(ARRAYFORMULA(ABS({c}{d0}:{c}{d1})));'
+                f'ARRAYFORMULA(ABS({c}{d0}:{c}{d1}));0)))'),
+     "Если причина — допущение сценария, это сознательный выбор; если база или поправка — артефакт расчёта", QQ_C)
 ROWS = r
 out[f"B4_LABOUR!A1:T{len(rows)}"] = rows
+YC = {"2026": "O", "2027": "P", "2028": "Q"}  # CHECKS year columns
+out["CHECKS!A33:Q35"] = [
+    ["Логика динамики"],
+    ["Зарплата: квартал к прошлому кварталу в коридоре истории", "Число кварталов вне коридора 10–90% (2011–2025), B4_LABOUR раздел 5; не выше порога", 0]
+    + [""] * 11 + [f'=COUNTIF(B4_LABOUR!{yc[0]}{r["QQ_CHK"]}:{yc[-1]}{r["QQ_CHK"]};"ВНИМАНИЕ")' if yc else ""
+                   for yc in ([c for c in QQ_C if year(c) == y] for y in ["2026", "2027", "2028"])],
+    ["  статус", "", ""] + [""] * 11 + [f'=IF({YC[y]}34="";"нет данных";IF({YC[y]}34<=$C$34;"OK";"ВНИМАНИЕ"))' for y in ["2026", "2027", "2028"]],
+]
 
 # links: annual results to other blocks, quarters to ANCHORS
 out["B2_DEMAND!E14:H14"] = [[f"=B4_LABOUR!{c}{r['INCOME']}" for c in "EFG"] + ["из B4_LABOUR: зарплата без детенизации и довольствие военных"]]
