@@ -4,6 +4,7 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 """
 import json
 import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -77,6 +78,8 @@ out["B1_REAL!A16:H16"] = [["MET", "Металлургия: загрузка мо
 MET = lambda s, c, p: f"+COEFS!$E${SHOCK_ROW['MET_' + s]}*({c}$16-{p}$16)"
 
 g = annual_growth(real_levels_q())
+O_CODES = ["MIL_NY", "ADM_N", "DEF_G", "ADM_G", "DEF_NOM_G", "ADM_NOM_G", "DEF_SH", "GVA_O", "O_CHK"]
+O_ROW = {k: 61 + i for i, k in enumerate(O_CODES)}
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
     "B": (f"{kv('B','const')} + {kv('B','PORTS')} × рост портов + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
@@ -89,7 +92,8 @@ eq = {
     "G": ("константа (до связки с потреблением B2)", lambda c, p: f"={C('G','const')}"),
     "H": ("−0,55 + 0,22 × рост портов", lambda c, p: f"={C('H','const')}+{C('H','PORTS')}*({c}$12/{p}$12-1)*100"),
     "J": ("тренд 2024–2025", lambda c, p: f"={C('J','const')}"),
-    "O": ("1,0 + 0,3 × изменение доли обороны", lambda c, p: f"={C('O','const')}+{C('O','DEF')}*({c}$15/{p}$15-1)*100"),
+    "O": ("доля обороны × рост численности военных + доля госуправления × рост штата (раздел 5)",
+          lambda c, p: f"={c}{O_ROW['GVA_O']}"),
     "OTHER": ("−2,68 + 0,77 × рост потребления домохозяйств (B2)",
               lambda c, p: f"={C('OTHER','const')}+COEFS!$E$35*B2_DEMAND!{c}$20"),
 }
@@ -132,5 +136,54 @@ for k, s in enumerate(CODES + ["GDP"]):
             line.append(f"=IFERROR(({c}{r}-{p}{r})/{p}$43*100;\"\")")
     contrib.append(line)
 out["B1_REAL!A45:BK57"] = contrib
+
+# 5. Section O split (input method for non-market output): real defence GVA follows military headcount
+# (B4 MIL_N), real public administration follows civilian staff; nominal GVA = pay fund (+ ESV).
+staff = pd.read_csv(Path(__file__).resolve().parents[1] / "data" / "external" / "sector_labour_m.csv")
+staff = staff[staff.code == "STAFF_O"].assign(y=lambda d: d.month.str[:4]).groupby("y").value
+adm = {y: round(float(v), 1) for y, v in staff.mean().items()}
+adm_months = staff.count()
+hist_o = g["O"].drop("2022").loc["2016":"2025"]
+lo, hi = round(float(hist_o.min()), 1), round(float(hist_o.max()), 1)
+r = O_ROW
+B4Q = {"D": ("D", "G"), "E": ("H", "K"), "F": ("L", "O"), "G": ("P", "S")}  # B4 quarter columns of each year
+q4 = lambda c, row, f="SUM": f"{f}(B4_LABOUR!{B4Q[c][0]}{row}:{B4Q[c][1]}{row})"
+pc = dict(zip("EFG", "DEF"))
+ADM_LAST = max(y for y in adm if adm_months[y] >= 6)
+sec = [["5. Госуправление и оборона (раздел O): оборона и гражданское управление отдельно"],
+       ["Код", "Показатель", "Уравнение / единицы", 2025, 2026, 2027, 2028, "Комментарий"],
+       ["MIL_NY", "Численность военных, среднее за год", "тыс. человек, B4_LABOUR строка 17"] +
+       [f"={q4(c, 17, 'AVERAGE')}" for c in "DEFG"] +
+       ["сценарий SCENARIOS 110–113; история — оценка (1 млн), Госстат численность не публикует"],
+       ["ADM_N", "Гражданские работники госуправления", "тыс. человек, среднеучётная (Госстат, раздел O)"] +
+       [adm["2025"]] + [adm[y] if y <= ADM_LAST else f"={pc[c]}{r['ADM_N']}*(1+{C('O','ADM_G')}/100)"
+                        for c, y in zip("EFG", ["2026", "2027", "2028"])] +
+       [f"2026 — среднее за {adm_months['2026']} мес.; дальше COEFS GVA_O_ADM_G"],
+       ["DEF_G", "Оборона: реальный рост", "рост численности военных, % г/г", ""] +
+       [f"=({c}{r['MIL_NY']}/{pc[c]}{r['MIL_NY']}-1)*100" for c in "EFG"] +
+       ["нерыночный выпуск по затратам: в постоянных ценах растёт вместе с занятыми"],
+       ["ADM_G", "Госуправление: реальный рост", "рост штата, % г/г",
+        round((adm["2025"] / adm["2024"] - 1) * 100, 1)] +
+       [f"=({c}{r['ADM_N']}/{pc[c]}{r['ADM_N']}-1)*100" for c in "EFG"] + ["традиционно, через занятых и зарплаты"],
+       ["DEF_NOM_G", "Оборона: номинальный рост", "рост фонда довольствия (B4 строка 47), % г/г", ""] +
+       [f"=({q4(c, 47)}/{q4(pc[c], 47)}-1)*100" for c in "EFG"] + ["численность × выплата на одного (с боевыми)"],
+       ["ADM_NOM_G", "Госуправление: номинальный рост", "(1 + штат) × (1 + оплата гражданских бюджетников, B4 строка 43) − 1", ""] +
+       [f"=((1+{c}{r['ADM_G']}/100)*{q4(c, 43)}/{q4(pc[c], 43)}-1)*100" for c in "EFG"] + [""],
+       ["DEF_SH", "Доля обороны в номинальной ВДС раздела O", "2025 — COEFS; дальше по номинальному росту частей",
+        f"={C('O','DEF_SH')}"] +
+       [f"={pc[c]}{r['DEF_SH']}*(1+{c}{r['DEF_NOM_G']}/100)/({pc[c]}{r['DEF_SH']}*(1+{c}{r['DEF_NOM_G']}/100)"
+        f"+(1-{pc[c]}{r['DEF_SH']})*(1+{c}{r['ADM_NOM_G']}/100))" for c in "EFG"] +
+       ["веса прошлого года: с концом войны доля обороны падает"],
+       ["GVA_O", "Раздел O: реальный рост", "доля обороны прошлого года × оборона + остальное × госуправление",
+        round(float(g.loc["2025", "O"]), 1)] +
+       [f"={pc[c]}{r['DEF_SH']}*{c}{r['DEF_G']}+(1-{pc[c]}{r['DEF_SH']})*{c}{r['ADM_G']}" for c in "EFG"] +
+       ["идёт в строку 27; 2025 — факт Госстата"],
+       ["O_CHK", "Проверка логики", f"история 2016–2025 без 2022: от {num(lo)} до {num(hi)}%", ""] +
+       [f"=IF(AND({c}{r['GVA_O']}>={num(lo).replace('−', '-')};{c}{r['GVA_O']}<={num(hi)});\"OK\";\"ВНИМАНИЕ: \"&"
+        f"IF(ABS({pc[c]}{r['DEF_SH']}*{c}{r['DEF_G']})>=ABS((1-{pc[c]}{r['DEF_SH']})*{c}{r['ADM_G']});"
+        f"\"численность военных (SCENARIOS 110–113)\";\"штат госуправления\"))" for c in "EFG"] +
+       ["демобилизация снижает ВДС обороны: это допущение сценария, а не ошибка; военные уходят в другие отрасли через рабочую силу B4"]]
+assert len(sec) == O_ROW["O_CHK"] - 58
+out[f"B1_REAL!A59:H{O_ROW['O_CHK']}"] = sec
 
 json.dump(out, sys.stdout, ensure_ascii=False)

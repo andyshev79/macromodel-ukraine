@@ -135,7 +135,8 @@ CALIBRATED = {
     ("D", "CAP"): (1.0, "Эластичность 1: выпуск растёт и падает вместе с мощностью"),
     ("F", "const"): (14.0, "Средний рост 2024–2025 (оборонное строительство и восстановление)"),
     ("J", "const"): (4.9, "Средний рост 2024–2025; оценка 2016–2025 (7,6) завышена довоенным бумом"),
-    ("O", "DEF"): (0.3, "Реакция на изменение доли расходов на оборону в ВВП"),
+    ("O", "ADM_G"): (0.0, "Штат гражданского госуправления на прогнозе постоянен: 2021–2025 сокращался "
+                          "(398 → 308 тыс.), в 2026 держится около 317 тыс."),
 }
 
 # Quarterly GVA_C (macromodel.quarterly): metallurgy enters the model through SHOCK_MET_C, not this fit
@@ -154,9 +155,24 @@ COEF_ROWS = [
     ("G", "const"),
     ("H", "const"), ("H", "PORTS"),
     ("J", "const"),
-    ("O", "const"), ("O", "DEF"),
+    ("O", "DEF_SH"), ("O", "ADM_G"),
     ("OTHER", "const"),
 ]
+
+
+ESV = 0.22  # единый социальный взнос сверх фонда довольствия
+
+
+def defence_share(year="2025") -> float:
+    """Share of defence in nominal GVA of section O: military pay fund with ESV / GVA_O.
+
+    Non-market output is valued at cost (compensation + consumption of fixed capital); capital is left out.
+    The military part of the budget wage bill is wages MIL_CB (COEFS row 103)."""
+    from macromodel import quarterly as Q
+    from macromodel.blocks.wages import CALIBRATED as W
+    q = Q.long_quarterly()
+    fund = q.loc[f"{year}Q1":f"{year}Q4", "CB_EXP_WAGES"].sum() * W["MIL_CB"][0] * (1 + ESV)
+    return float(fund / quarterly().loc[f"{year}Q1":f"{year}Q4", "GVA_O_NOM"].sum())
 
 
 def coef_table() -> list[dict]:
@@ -169,6 +185,11 @@ def coef_table() -> list[dict]:
     for s, var in COEF_ROWS:
         if f"GVA_{s}" in quarterly.USED and (s, var) not in CALIBRATED:
             rows += [dict(r, note=QUARTERLY_NOTES.get((s, var), "")) for r in quarterly.coef_rows(f"GVA_{s}", [(f"GVA_{s}", var)])]
+        elif (s, var) == ("O", "DEF_SH"):
+            rows.append({"eq": "GVA_O", "var": var, "coef": round(defence_share(), 2), "se": None, "r2": None,
+                         "n": None, "method": "расчёт 2025",
+                         "note": f"Доля обороны в номинальной ВДС раздела O: фонд довольствия военных "
+                                 f"× (1 + ЕСВ {ESV:.0%}) / ВДС O (Госстат)"})
         elif (s, var) in CALIBRATED:
             v, note = CALIBRATED[(s, var)]
             rows.append({"eq": f"GVA_{s}", "var": var, "coef": v, "se": None, "r2": None, "n": None,
