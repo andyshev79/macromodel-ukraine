@@ -247,6 +247,23 @@ def industry_yoy_m(path: Path) -> pd.Series:
     return pd.Series(out, dtype=float).sort_index()
 
 
+def construction_m(path: Path) -> pd.DataFrame:
+    """Construction output, sheet SectorIndexes M: index % y/y, index from January % to the same months of
+    last year, and volume of work, UAH million (cumulative from January in the sheet, returned per month)."""
+    rows = _rows(path, "SectorIndexes M")
+    start = _col(rows[1], "Buildings")
+    c = start + [str(v).strip() if v else "" for v in rows[2][start:start + 3]].index("y/y")
+    vcol = _col(rows[2], "Обсяг ВБП")
+    out = {}
+    for r in rows[3:]:
+        d, v, ytd, cum = _cell(r, 3), _num(_cell(r, c)), _num(_cell(r, c + 1)), _num(_cell(r, vcol))
+        if isinstance(d, datetime) and (v is not None or cum is not None):
+            out[pd.Period(d, "M")] = {"yoy": v, "ytd": ytd, "cum": cum}
+    df = pd.DataFrame.from_dict(out, orient="index").sort_index()
+    prev = df["cum"].shift().where(df.index.month != 1, 0)
+    return df.assign(volume=df["cum"] - prev).drop(columns="cum")
+
+
 # Budget sheet: consolidated budget, cumulative from January, UAH million, from 2011.
 # key -> (block title prefix in column A, row label prefix in column B or budget code)
 BUDGET_ROWS = {
