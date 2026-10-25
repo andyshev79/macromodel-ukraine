@@ -223,3 +223,14 @@ def test_agro_block():
     assert 0.3 < h["agro_sh"] < 0.6 and 5 < h["sigma"] < 20 and h["h1_now"] > 0
     b1 = payload("b1_payload")["B1_REAL!A1:H15"]
     assert b1[10][0] == "HARVEST" and b1[10][4] == "=B10_AGRO!E25"
+
+
+def test_scenario_logic():
+    t = payload("scenario_logic_payload")["SCENARIOS!A142:F189"]
+    lim = {r[0]: r[3] for r in t[3:13]}
+    assert lim["LIM_PORTS"] == 160 and lim["LIM_CAP"] == 24 and lim["FACT_PORTS"] == 84.8
+    chk = [r for r in t[16:46]]
+    assert t[14][3] == '=COUNTIF(D158:F187;"ВНИМАНИЕ*")' and chk[0][0] == "L_PORTS" and chk[-1][0] == "O_139"
+    assert all(str(f).startswith("=") for r in chk for f in r[3:4])
+    assert "C110:L110" in next(r for r in chk if r[0] == "L_MIL")[3]  # military headcount rows
+    assert "C123:E123" in next(r for r in chk if r[0] == "C_PEACE")[3]  # peace effect rows

@@ -1,0 +1,146 @@
+"""Logic checks of the scenario inputs and boundary values (SCENARIOS rows 142+, 2026-10-25).
+
+Andrey asked for checks inside SCENARIOS so that scenarios do not contradict each other or the data,
+and for boundary values (total port capacity, total generation and similar). Three kinds of checks:
+limits (a scenario value above a physical boundary), ordering (pessimistic <= base <= optimistic for
+2027-2028, reversed for "bad" parameters) and consistency with the ceasefire quarter (row 16) and the
+2026 facts. Every rule gives OK or ВНИМАНИЕ with the years and values that break it.
+
+Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
+"""
+import json
+import sys
+
+FIRST = 142
+SCEN = {"База": "CDE", "Пессимистичный": "FGH", "Оптимистичный": "IJK"}
+YEARS = {"База": "C$15:E$15", "Пессимистичный": "F$15:H$15", "Оптимистичный": "I$15:K$15"}
+
+# boundary values: code, name, unit, value, source
+LIMITS = [
+    ("LIM_PORTS", "Предельная пропускная способность всех морских портов", "млн т в год", 160,
+     "Рекорд 2019 года — 160 млн т (USPA), все порты до 2022 года. Выше не было никогда"),
+    ("LIM_PORTS_WAR", "Порты во время войны: Одесский кластер и Дунай", "млн т в год", 110,
+     "Оценка Claude: без портов Николаева, Херсона и оккупированных; рекорд коридора около 9–10 млн т в месяц"),
+    ("LIM_CAP", "Предельная доступная мощность энергосистемы в пик", "ГВт", 24,
+     "Пиковое потребление до войны — около 24 ГВт (2021); выработка 2021 — около 156 ТВт·ч (по памяти). ЗАЭС (6 ГВт) недоступна"),
+    ("LIM_CAP_G", "Предельный прирост мощности за год", "ГВт в год", 3,
+     "Оценка Claude: ремонт блоков ТЭС/ГЭС, распределённая генерация и импорт добавляли 2–3 ГВт в год (2024–2025)"),
+    ("LIM_MET", "Предельная загрузка металлургии", "% от уровня 2025", 150,
+     "Оценка Claude: работающие комбинаты (Запорожсталь, АМКР, Каметсталь) на полной загрузке; Мариуполь потерян"),
+    ("LIM_HARV", "Предельный урожай шести культур на подконтрольной территории", "млн т", 91,
+     "Оценка Claude: средняя площадь 2023–2026 × рекордная урожайность 2021 (+15% к среднему). Рекорд 2021 со всей территорией — 106,5"),
+    ("LIM_DEF", "Предельные расходы на оборону", "% ВВП", 40,
+     "Максимум войны — около 37% ВВП (2023–2024, Казначейство); выше — только при монетизации"),
+    ("LIM_MIL", "Предельная численность военных", "тыс. человек", 1200,
+     "Оценка Claude: демография и бюджет; сейчас около 1 млн (общепринятая оценка)"),
+    ("FACT_PORTS", "Порты 2026: факт 1 полугодия × 2", "млн т в год", 84.8,
+     "42,4 млн т за 1 полугодие 2026 (GMK Center, 16.07.2026). Сценарий 2026 должен быть в пределах ±15%"),
+    ("FACT_DEF", "Оборона 2026: факт 1 полугодия", "% ВВП", 35.7,
+     "Казначейство, функция 0200, 1 пол. 2026. Сценарий 2026 должен быть в пределах ±5 п.п."),
+]
+L = {code: FIRST + 3 + i for i, (code, *_) in enumerate(LIMITS)}
+lim = lambda code: f"$D${L[code]}"
+
+# parameters checked for ordering: row, name, +1 if higher is better for the economy, -1 if worse
+ORDER = [(18, "Мощность энергосистемы", 1), (19, "Порты", 1), (20, "Внешнее финансирование бюджета", 1),
+         (17, "Удары по энергетике", -1), (21, "Расходы на оборону", -1), (22, "Чистая миграция (возврат +, отъезд −)", 1),
+         (23, "Мобилизация", -1), (28, "Рост ВВП еврозоны", 1), (31, "Приток иностранных рабочих", 1),
+         (63, "Загрузка металлургии", 1), (123, "Эффект мира: потребление", 1), (124, "Эффект мира: восстановление", 1),
+         (131, "Деньги на восстановление", 1), (138, "Погода для урожая", 1), (139, "Посевная площадь", 1)]
+
+
+def over(row, cols, years, limit, label=""):
+    """Years where the scenario value is above the limit."""
+    r = f"{cols[0]}{row}:{cols[2]}{row}"
+    return (f"=ARRAYFORMULA(IF(MAX({r})<={limit};\"OK\";\"ВНИМАНИЕ: {label}\"&TEXTJOIN(\", \";TRUE;"
+            f"IF({r}>{limit};{years}&\": \"&{r};\"\"))))")
+
+
+def ceasefire(cols):
+    """Year of the ceasefire in this scenario (row 16), 9999 if none."""
+    r = f"{cols[0]}$16:{cols[2]}$16"
+    return f"IFERROR(VALUE(LEFT(INDEX(FILTER({r};{r}<>\"нет\";{r}<>\"\");1);4));9999)"
+
+
+checks = []
+# 1. limits, per scenario
+for code, row, label in [("LIM_PORTS", 19, ""), ("LIM_CAP", 18, ""), ("LIM_MET", 63, ""), ("LIM_DEF", 21, "")]:
+    name = next(n for c, n, *_ in LIMITS if c == code)
+    checks.append([code.replace("LIM_", "L_"), f"Не выше предела: {name[0].lower() + name[1:]}", f"строка {row} ≤ D{L[code]}"] +
+                  [over(row, SCEN[s], YEARS[s], lim(code)) for s in SCEN])
+# ports during the war (years before the ceasefire year)
+checks.append(["L_PORTS_WAR", "Порты до прекращения огня не выше Одесского кластера и Дуная", f"строка 19 ≤ D{L['LIM_PORTS_WAR']} до года строки 16"] +
+              [f"=ARRAYFORMULA(IF(SUM(({YEARS[s]}<{ceasefire(c)})*({c[0]}19:{c[2]}19>{lim('LIM_PORTS_WAR')}))=0;\"OK\";"
+               f"\"ВНИМАНИЕ: порты выше \"&{lim('LIM_PORTS_WAR')}&\" млн т во время войны\"))" for s, c in SCEN.items()])
+# energy capacity growth per year, from 15 GW in 2025
+checks.append(["L_CAP_G", "Мощность энергосистемы растёт не быстрее предела", f"прирост за год ≤ D{L['LIM_CAP_G']} ГВт (2025 — 15 ГВт)"] +
+              [f"=ARRAYFORMULA(IF(MAX({c[0]}18-15;{c[1]}18-{c[0]}18;{c[2]}18-{c[1]}18)<={lim('LIM_CAP_G')};\"OK\";"
+               f"\"ВНИМАНИЕ: прирост \"&TEXTJOIN(\", \";TRUE;IF({{{c[0]}18-15\\{c[1]}18-{c[0]}18\\{c[2]}18-{c[1]}18}}>{lim('LIM_CAP_G')};"
+               f"{YEARS[s]}&\": +\"&{{{c[0]}18-15\\{c[1]}18-{c[0]}18\\{c[2]}18-{c[1]}18}}&\" ГВт\";\"\"))))" for s, c in SCEN.items()])
+# harvest implied by area and weather (rows 138-139) against the boundary
+checks.append(["L_HARV", "Урожай не выше предела подконтрольной территории",
+               f"средний 2023–2026 (B10_AGRO I25) × площадь × погода ≤ D{L['LIM_HARV']}"] +
+              [f"=ARRAYFORMULA(IF(MAX(B10_AGRO!$I$25*(1+{c[1]}139:{c[2]}139/100)*(1+{c[1]}138:{c[2]}138/100))<={lim('LIM_HARV')};\"OK\";"
+               f"\"ВНИМАНИЕ: урожай до \"&ROUND(MAX(B10_AGRO!$I$25*(1+{c[1]}139:{c[2]}139/100)*(1+{c[1]}138:{c[2]}138/100));1)&\" млн т\"))"
+               for s, c in SCEN.items()])
+# military headcount, quarterly rows 110-112 (C:L)
+checks.append(["L_MIL", "Численность военных не выше предела", f"строки 110–112 ≤ D{L['LIM_MIL']}"] +
+              [f"=IF(MAX(C{r}:L{r})<={lim('LIM_MIL')};\"OK\";\"ВНИМАНИЕ: до \"&MAX(C{r}:L{r})&\" тыс.\")" for r in (110, 111, 112)])
+# indices and shares within 0..1
+checks.append(["L_SHARE", "Индексы и доли от 0 до 1", "строки 17, 32, 33"] +
+              [f"=IF(AND(MIN({c[0]}17:{c[2]}17;{c[0]}32:{c[2]}33)>=0;MAX({c[0]}17:{c[2]}17;{c[0]}32:{c[2]}33)<=1);\"OK\";"
+               f"\"ВНИМАНИЕ: значение вне 0–1\")" for s, c in SCEN.items()])
+# 2. 2026 against the facts of the first half
+checks.append(["F_PORTS", "Порты 2026 согласованы с фактом 1 полугодия", f"|строка 19 (2026) / D{L['FACT_PORTS']} − 1| ≤ 15%"] +
+              [f"=IF(ABS({c[0]}19/{lim('FACT_PORTS')}-1)<=0,15;\"OK\";\"ВНИМАНИЕ: \"&{c[0]}19&\" при факте \"&{lim('FACT_PORTS')})"
+               for s, c in SCEN.items()])
+checks.append(["F_DEF", "Оборона 2026 согласована с фактом 1 полугодия", f"|строка 21 (2026) − D{L['FACT_DEF']}| ≤ 5 п.п."] +
+              [f"=IF(ABS({c[0]}21-{lim('FACT_DEF')})<=5;\"OK\";\"ВНИМАНИЕ: \"&{c[0]}21&\"% при факте \"&{lim('FACT_DEF')}&\"%\")"
+               for s, c in SCEN.items()])
+# 3. consistency with the ceasefire quarter (row 16)
+checks.append(["C_PEACE", "Эффект мира не раньше прекращения огня", "строки 123–124 = 0 в годы до года строки 16"] +
+              [f"=ARRAYFORMULA(IF(SUM(({YEARS[s]}<{ceasefire(c)})*(ABS({c[0]}123:{c[2]}123)+ABS({c[0]}124:{c[2]}124)))=0;\"OK\";"
+               f"\"ВНИМАНИЕ: эффект мира в \"&TEXTJOIN(\", \";TRUE;IF(({YEARS[s]}<{ceasefire(c)})*(ABS({c[0]}123:{c[2]}123)+ABS({c[0]}124:{c[2]}124))>0;"
+               f"{YEARS[s]};\"\"))&\" до прекращения огня\"))" for s, c in SCEN.items()])
+checks.append(["C_STRIKES", "После прекращения огня удары слабые", "строка 17 ≤ 0,3 в годы после года строки 16"] +
+              [f"=ARRAYFORMULA(IF(SUM(({YEARS[s]}>{ceasefire(c)})*({c[0]}17:{c[2]}17>0,3))=0;\"OK\";"
+               f"\"ВНИМАНИЕ: удары \"&TEXTJOIN(\", \";TRUE;IF(({YEARS[s]}>{ceasefire(c)})*({c[0]}17:{c[2]}17>0,3);"
+               f"{YEARS[s]}&\": \"&{c[0]}17:{c[2]}17;\"\"))&\" после прекращения огня\"))" for s, c in SCEN.items()])
+checks.append(["C_DEF", "После прекращения огня оборона не растёт", "строка 21 в год после года строки 16 ≤ значения года прекращения"] +
+              [f"=ARRAYFORMULA(IF(SUM(({c[1]}$15:{c[2]}$15>{ceasefire(c)})*({c[1]}21:{c[2]}21>{c[0]}21:{c[1]}21))=0;\"OK\";"
+               f"\"ВНИМАНИЕ: оборона растёт после прекращения огня\"))" for s, c in SCEN.items()])
+checks.append(["C_MIL", "Без прекращения огня нет демобилизации", "численность военных (строки 110–112) падает только при мире"] +
+              [f"=ARRAYFORMULA(IF(OR({ceasefire(c)}<9999;MIN(D{r}:L{r}-C{r}:K{r})>=0);\"OK\";"
+               f"\"ВНИМАНИЕ: численность падает без прекращения огня\"))" for (s, c), r in zip(SCEN.items(), (110, 111, 112))])
+
+# 4. ordering pessimistic <= base <= optimistic, 2027-2028
+order = []
+for row, name, sign in ORDER:
+    b, p, o = f"D{row}:E{row}", f"G{row}:H{row}", f"J{row}:K{row}"
+    lo, hi = (p, o) if sign > 0 else (o, p)
+    rule = "пессимистичный ≤ база ≤ оптимистичный" if sign > 0 else "оптимистичный ≤ база ≤ пессимистичный"
+    order.append([f"O_{row}", f"Порядок сценариев: {name[0].lower() + name[1:]}", f"строка {row}, 2027–2028: {rule}",
+                  f"=ARRAYFORMULA(IF(SUM(({lo}>{b})+({b}>{hi}))=0;\"OK\";\"ВНИМАНИЕ: \"&TEXTJOIN(\", \";TRUE;IF(({lo}>{b})+({b}>{hi});"
+                  f"D$15:E$15&\": пес. \"&{p}&\", база \"&{b}&\", опт. \"&{o};\"\"))))", "", ""])
+
+head = FIRST + 3 + len(LIMITS) + 1  # blank row after the limits table
+CHK_FIRST = head + 2
+n = len(checks) + len(order)
+rows = [
+    ["Предельные величины и проверка логики сценариев"],
+    ["Пределы — физические границы, выше которых сценарий невозможен. Проверки ниже сравнивают с ними все три сценария, "
+     "порядок сценариев и согласованность с прекращением огня (строка 16) и фактом 2026 года."],
+    ["Код", "Предел", "Единицы", "Значение", "Источник"],
+] + [[c, n_, u, v, src] for c, n_, u, v, src in LIMITS] + [
+    [""],
+    ["Проверка логики сценариев", "", "Замечаний:",
+     f"=COUNTIF(D{CHK_FIRST}:F{CHK_FIRST + n - 1};\"ВНИМАНИЕ*\")"],
+    ["Код", "Проверка", "Правило", "База", "Пессимистичный", "Оптимистичный"],
+] + checks + order + [
+    [""],
+    ["Как читать: ВНИМАНИЕ не запрещает сценарий, а показывает противоречие. Если оно сознательное (например, после мира "
+     "мужчины уезжают за границу), объясните его в столбце O строки параметра; если нет — исправьте значение. "
+     "Порядок сценариев проверяется для 2027–2028: 2026 у всех сценариев почти факт."],
+]
+out = {f"SCENARIOS!A{FIRST}:F{FIRST + len(rows) - 1}": rows}
+json.dump(out, sys.stdout, ensure_ascii=False)
