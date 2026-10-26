@@ -49,7 +49,7 @@ top = [
     [""],
     ["1. Драйверы"],
     ["Код", "Показатель", "Единицы", 2025, 2026, 2027, 2028, "Как считается"],
-    ["GDP_P", "Рост ВВП по производству (B1)", "%", "=B1_REAL!D29", "=B1_REAL!E29", "=B1_REAL!F29", "=B1_REAL!G29", "из B1_REAL"],
+    ["GDP_P", "Рост ВВП по производству (B1)", "%", "=B1_REAL!D31", "=B1_REAL!E31", "=B1_REAL!F31", "=B1_REAL!G31", "из B1_REAL"],
     ["PORTS", "Пропускная способность портов", "млн т", "=B1_REAL!D12", "=B1_REAL!E12", "=B1_REAL!F12", "=B1_REAL!G12", "из B1_REAL"],
     ["DEF", "Расходы на оборону", "% ВВП", "=B1_REAL!D15", "=B1_REAL!E15", "=B1_REAL!F15", "=B1_REAL!G15", "из B1_REAL"],
     ["REAL_WAGE", "Рост реальной зарплаты", "%", round(float(x["REAL_WAGE"]), 1)]
@@ -106,7 +106,7 @@ eqs = {
            lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14+B7_MONETARY!{c}39+SCENARIOS!{ACT_C[c]}{PEACE_ROW}"),
     "GOV": (f"{pnum('GDPE_GOV', 'O_SH')} × раздел O из B1 (численность военных и штат) + остальное × "
             f"({kv('GOV', 'const')} + {kv('GOV', 'REAL_DEF')} × рост реальных расходов на оборону)",
-            lambda c, p: f"={P('GDPE_GOV','O_SH')}*B1_REAL!{c}$68+(1-{P('GDPE_GOV','O_SH')})*"
+            lambda c, p: f"={P('GDPE_GOV','O_SH')}*B1_REAL!{c}$74+(1-{P('GDPE_GOV','O_SH')})*"
                          f"({C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15)"),
     "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7) + восстановление",
              lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40+SCENARIOS!{ACT_C[c]}{PEACE_ROW + 1}"),
@@ -130,7 +130,7 @@ for c in ["HH", "GOV", "GFCF", "EXP", "IMP", "INV"]:
 rows.append(["GDP_REAL_E", "ВВП по расходам", "C + G + I + X − M + запасы"]
             + [f"={sumif(c + '$19', 38)}/{sumif(c + '$19-1', 38)}*100-100" for c in "DEFG"])
 rows.append(["GAP_P_E", "Разрыв: ВВП по производству / по расходам − 1", "%, порог на листе CHECKS"]
-            + [f"=B1_REAL!{c}29-{c}26" for c in "DEFG"])
+            + [f"=B1_REAL!{c}31-{c}26" for c in "DEFG"])
 out["B2_DEMAND!A18:G27"] = rows
 
 lv = real_levels_q()
