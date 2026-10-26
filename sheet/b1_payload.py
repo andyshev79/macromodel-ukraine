@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from macromodel.blocks.real_sector import (SECTORS, annual_growth, coef_table, manuf_coef_rows, manuf_data, other_coef_rows,
+from macromodel.blocks.real_sector import (SECTORS, annual_growth, coef_table, manuf_coef_rows, manuf_data, other_coef_rows, pub_prices,
                                           other_parts, real_levels_q)
 from macromodel.blocks.demand import link_other_to_consumption
 from macromodel.blocks.shocks import SHOCK_ROW, SHOCKS, estimated
@@ -92,6 +92,9 @@ O_CODES = ["MIL_NY", "ADM_N", "DEF_G", "ADM_G", "DEF_NOM_G", "ADM_NOM_G", "DEF_S
 O_ROW = {k: 61 + i for i, k in enumerate(O_CODES)}
 OT_CODES = ["OT_TAX", "OT_MKT", "OT_PUB", "OTHER_BU", "OTHER_TD", "OT_CHK"]
 OT_ROW = {k: 87 + i for i, k in enumerate(OT_CODES)}
+PB_CODES = ["PUB_MINW", "PUB_CIV", "PUB_CPI", "PUB_RATE", "PUB_RATE_H", "PUB_FUND", "PUB_REAL", "PUB_CHK", "PUB_FLOOR"]
+PB_ROW = {k: 96 + i for i, k in enumerate(PB_CODES)}
+PUB_SC = 194  # SCENARIOS: education and health pay fund, active columns L:N
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
     "B": (f"{kv('B','const')} + {kv('B','PORTS')} × рост портов + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
@@ -273,9 +276,9 @@ ot = [["7. Прочие отрасли и чистые налоги по час�
        og("MKT")] +
       [f"={O('GVA_OT_MKT','const')}+{O('GVA_OT_MKT','HH')}*B2_DEMAND!{c}$20+{O('GVA_OT_MKT','CAP')}*({c}$13/{pc[c]}$13-1)*100" for c in "EFG"] +
       [f"{osh['MKT']}% ВВП; энергия — оценка Claude (отключения, разрушения)"],
-      ["OT_PUB", "Образование и здравоохранение", f"средний рост 2016–2025 без 2022: {ov('GVA_OT_PUB','const')}%", og("PUB")] +
-      [f"={O('GVA_OT_PUB','const')}" for c in "EFG"] +
-      [f"{osh['PUB']}% ВВП; нерыночные услуги, Госстат меряет затратами; связь со штатом и бюджетом в данных не найдена"],
+      ["OT_PUB", "Образование и здравоохранение", "фонд оплаты труда / ставки (раздел 7а)", og("PUB")] +
+      [f"={c}{PB_ROW['PUB_REAL']}" for c in "EFG"] +
+      [f"{osh['PUB']}% ВВП; нерыночные услуги, Госстат меряет затратами: повышения ставок идут в цену, реальный рост — фонд сверх ставок"],
       ["OTHER_BU", "Прочие отрасли и налоги снизу вверх",
        f"веса: налоги {ov('GVA_OT_W','TAX')}, рыночные услуги {ov('GVA_OT_W','MKT')}, образование и здравоохранение {ov('GVA_OT_W','PUB')}",
        round(float(g.loc["2025", "OTHER"]), 1)] +
@@ -288,5 +291,59 @@ ot = [["7. Прочие отрасли и чистые налоги по час�
        for c in "EFG"] + ["снизу вверх видит ВНОК (налоги) и энергию (услуги), сверху — только потребление"]]
 assert len(ot) == R7["OT_CHK"] - 84
 out[f"B1_REAL!A85:H{R7['OT_CHK']}"] = ot
+
+# 7a. Education and health: pay rates follow government decisions (minimum wage, raises of civilian budget
+# staff), at least half of CPI; the nominal follows the pay fund in SCENARIOS; real growth = fund over rates.
+pp = pub_prices()
+ph = pp["hist"].loc["2025"]
+lo, hi = round(pp["real_lo"], 1), round(pp["real_hi"], 1)
+flo, fhi = num(lo).replace("−", "-"), num(hi).replace("−", "-")
+yavg = lambda c, row: f"(AVERAGE(B4_LABOUR!{B4Q[c][0]}{row}:{B4Q[c][1]}{row})/AVERAGE(B4_LABOUR!{B4Q[pc[c]][0]}{row}:{B4Q[pc[c]][1]}{row})-1)*100"
+SC = dict(zip("EFG", "LMN"))
+P = PB_ROW
+pb = [["7а. Образование и здравоохранение: ставки по госрешениям, реальный рост = фонд оплаты сверх ставок"],
+      ["Код", "Показатель", "Уравнение / единицы", 2025, 2026, 2027, 2028, "Комментарий"],
+      ["PUB_MINW", "Рост минимальной зарплаты", "% к прошлому году, средняя за год (B4_LABOUR строка 37)", round(float(ph.MINW), 1)] +
+      [f"={yavg(c, 37)}" for c in "EFG"] + ["закон о бюджете и Бюджетная декларация"],
+      ["PUB_CIV", "Повышение ставок гражданских бюджетников", "% к прошлому году, средняя за год (B4_LABOUR строка 43)", ""] +
+      [f"={yavg(c, 43)}" for c in "EFG"] + ["учителя +30% с 1 января и +20% с 1 сентября 2026, врачи до 35 тыс.; SCENARIOS строки повышений"],
+      ["PUB_CPI", "ИПЦ, средний за год", "B4_LABOUR строка 63", "=B4_LABOUR!D63"] + [f"=B4_LABOUR!{c}63" for c in "EFG"] + [""],
+      ["PUB_RATE", "Рост ставок (дефлятор образования и здравоохранения)",
+       f"MAX({ov('GVA_OT_PUB','MINW_W')} × минимальная + (1 − {ov('GVA_OT_PUB','MINW_W')}) × повышения; {ov('GVA_OT_PUB','CPI_FLOOR')} × ИПЦ)",
+       round(float(ph.DEFL), 1)] +
+      [f"=MAX({O('GVA_OT_PUB','MINW_W')}*{c}{P['PUB_MINW']}+(1-{O('GVA_OT_PUB','MINW_W')})*{c}{P['PUB_CIV']};"
+       f"{O('GVA_OT_PUB','CPI_FLOOR')}*{c}{P['PUB_CPI']})" for c in "EFG"] +
+      ["2025 — факт (неявный дефлятор Госстата); не ниже половины инфляции"],
+      ["PUB_RATE_H", "Ставки по истории (сверка)", f"{ov('GVA_OT_PUB_DEFL','const')} + {ov('GVA_OT_PUB_DEFL','MINW')} × минимальная", ""] +
+      [f"={O('GVA_OT_PUB_DEFL','const')}+{O('GVA_OT_PUB_DEFL','MINW')}*{c}{P['PUB_MINW']}" for c in "EFG"] +
+      [f"R² {num(round(pp['r2'], 2))}, {pp['n']} лет; раньше повышения шли за минимальной, сейчас — отдельными решениями"],
+      ["PUB_FUND", "Фонд оплаты труда образования и здравоохранения", f"% к прошлому году, SCENARIOS строка {PUB_SC}", round(float(ph.NOM), 1)] +
+      [f"=SCENARIOS!{SC[c]}{PUB_SC}" for c in "EFG"] + ["2025 — номинальная ВДС разделов P и Q"],
+      ["PUB_REAL", "Реальный рост образования и здравоохранения", "(1 + фонд) / (1 + ставки) − 1", round(float(ph.REAL), 1)] +
+      [f"=((1+{c}{P['PUB_FUND']}/100)/(1+{c}{P['PUB_RATE']}/100)-1)*100" for c in "EFG"] + ["идёт в строку 89"],
+      ["PUB_CHK", "Проверка: реальный рост против истории", f"история 2015–2025 без 2022: от {num(lo)} до {num(hi)}%", ""] +
+      [f"=IF(OR({c}{P['PUB_REAL']}<{flo};{c}{P['PUB_REAL']}>{fhi});\"ВНИМАНИЕ: вне истории\";"
+       f"IF({c}{P['PUB_FUND']}<{c}{P['PUB_RATE']};\"ВНИМАНИЕ: фонд растёт медленнее ставок — сокращение штата или часов\";\"OK\"))" for c in "EFG"] +
+      ["если повышения объявлены, а фонд не растёт, реальный объём падает"],
+      ["PUB_FLOOR", "Проверка: правило ½ инфляции", "решения о повышении против половины ИПЦ", ""] +
+      [f"=IF({O('GVA_OT_PUB','MINW_W')}*{c}{P['PUB_MINW']}+(1-{O('GVA_OT_PUB','MINW_W')})*{c}{P['PUB_CIV']}<{O('GVA_OT_PUB','CPI_FLOOR')}*{c}{P['PUB_CPI']};"
+       f"\"ВНИМАНИЕ: решений мало, ставки подняты до ½ инфляции\";\"OK\")" for c in "EFG"] +
+      [f"в 2025 правило не выполнилось: ставки +{num(round(float(ph.DEFL), 1))}% при инфляции {num(round(float(ph.CPI), 1))}% (минимальная заморожена)"]]
+assert len(pb) == P["PUB_FLOOR"] - 93
+out[f"B1_REAL!A94:H{P['PUB_FLOOR']}"] = pb
+
+# SCENARIOS defaults for the pay fund (Claude estimates; 2026 from the budget law). Written only without --coefs.
+PUB_FUND = {"Base": [25.5, 14, 10], "Pess": [25.5, 8, 6], "Opt": [25.5, 15, 12]}
+out[f"SCENARIOS!A{PUB_SC - 3}:O{PUB_SC}"] = [
+    ["Образование и здравоохранение: фонд оплаты труда (B1_REAL раздел 7а)"],
+    ["Параметр", "Единицы", "База", "", "", "Пессимистичный", "", "", "Оптимистичный", "", "", "Активный", "", "", "Источник"],
+    ["", "", 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028],
+    ["Фонд оплаты труда образования и здравоохранения", "% рост за год"] + PUB_FUND["Base"] + PUB_FUND["Pess"] + PUB_FUND["Opt"] +
+    [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a}{PUB_SC};{b}{PUB_SC};{d}{PUB_SC})" for a, b, d in zip("CDE", "FGH", "IJK")] +
+    ["2026: госбюджет — образование 270,1 млрд (+36,9%), здравоохранение 256,7 млрд (+15,4%), вместе ≈ +25,5% "
+     "(Слово і діло, 12.12.2025; местные бюджеты не учтены). 2027–2028 — оценка Claude: база чуть выше ставок, "
+     "пессимистичный — фонд отстаёт от повышений, оптимистичный — с запасом"]]
+if "--coefs" in sys.argv:
+    out = {k: v for k, v in out.items() if not k.startswith("SCENARIOS")}
 
 json.dump(out, sys.stdout, ensure_ascii=False)
