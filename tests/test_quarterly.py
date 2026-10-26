@@ -183,9 +183,9 @@ def test_construction_reconstruction():
 
 
 def test_construction_block():
-    from macromodel.blocks.construction import coef_rows, fact_ytd, history
+    from macromodel.blocks.construction import area_growth, coef_rows, fact_ytd, history, kind_facts, weights
     p = payload("b9_payload")
-    t = p["B9_CONSTRUCTION!A1:H36"]
+    t = p["B9_CONSTRUCTION!A1:H55"]
     assert [r[0] for r in t[21:26]] == ["F_CIVIL", "F_INFRA", "F_FORT", "CONSTR", "GVA_F"]
     assert t[24][4].startswith(f"=({fact_ytd()['months']}*E19+")  # 2026 anchored to the monthly facts
     assert "COEFS!$E$171*F13" in t[22][5] and "SCENARIOS!M131" in t[14][5]
@@ -195,6 +195,12 @@ def test_construction_block():
     h = history()
     assert h["lo"] < 0 < h["hi"] and 20 < h["gfcf_usd"] < 80
     assert -30 < fact_ytd()["yoy"] < 30
+    w = weights()  # Ukrstat index by kind: weights sum to one, engineering works are the largest kind
+    assert abs(sum(w.values()) - 1) < 1e-9 and w["ENG"] > w["NRES"] > w["RES"] > 0
+    k = kind_facts()
+    assert abs(k["facts"]["TOT"][str(k["year"])] - fact_ytd()["yoy"]) < 0.05  # same series as MacroStat
+    assert set(area_growth()["growth"]) >= {"RES_DONE", "START"}
+    assert [r[0] for r in t[52:55]] == ["KIND_BLD", "KIND_ENG", "START_CHK"] and "G41" in t[52][4]
 
 
 def test_manufacturing_blocks():
