@@ -240,3 +240,16 @@ def test_scenario_logic():
     assert all(str(f).startswith("=") for r in chk for f in r[3:4])
     assert "C110:L110" in next(r for r in chk if r[0] == "L_MIL")[3]  # military headcount rows
     assert "C123:E123" in next(r for r in chk if r[0] == "C_PEACE")[3]  # peace effect rows
+
+
+def test_other_split():
+    from macromodel.blocks.real_sector import other_coef_rows, other_parts
+    p = payload("b1_payload")
+    sec = p["B1_REAL!A85:H92"]
+    r = {row[0]: 85 + i for i, row in enumerate(sec) if row and row[0]}
+    assert p["B1_REAL!A17:G29"][11][5] == f"=F{r['OTHER_BU']}"  # row 28 takes the bottom-up sum of three parts
+    w = other_parts()["w"]
+    assert abs(sum(w.values()) - 1) < 1e-9 and all(v > 0.1 for v in w.values())
+    c = {(row["eq"], row["var"]): row["coef"] for row in other_coef_rows()}
+    assert c[("GVA_OT_TAX", "HH")] > 0 and c[("GVA_OT_MKT", "HH")] > 0
+    assert len(p["COEFS!A204:L213"]) == 10
