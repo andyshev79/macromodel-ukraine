@@ -6,7 +6,8 @@ changed against the previous run (data/recalc/last.json). Only cells derived fro
 written: SCENARIOS, forecast formulas and hand-entered cells in ANCHORS are left alone, so the
 user's inputs survive. SUMMARY is refreshed separately (snapshots per scenario).
 
-Usage: python scripts/recalc.py [--fetch]   (--fetch runs scripts/fetch_history.py first)
+Usage: python scripts/recalc.py [--fetch]   (--fetch runs scripts/fetch_history.py first, then
+       scripts/fetch_ukrstat.py: Gosstat snapshots, revision log and the cross-check with the history)
 """
 import argparse
 import json
@@ -119,6 +120,10 @@ if __name__ == "__main__":
     args = p.parse_args()
     if args.fetch:
         subprocess.run([sys.executable, str(ROOT / "scripts" / "fetch_history.py")], check=True, cwd=ROOT)
+        # Gosstat directly: revisions and quarters the NBU copy has not picked up yet; a failure here
+        # does not stop the recalculation, the history above is enough for it
+        if subprocess.run([sys.executable, str(ROOT / "scripts" / "fetch_ukrstat.py")], cwd=ROOT).returncode:
+            print("fetch_ukrstat.py: Госстат недоступен, сверка не обновлена")
     new = build()
     OUT.mkdir(parents=True, exist_ok=True)
     last = OUT / "last.json"
