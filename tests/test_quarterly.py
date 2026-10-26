@@ -157,17 +157,17 @@ def test_defence_split():
     from macromodel.blocks.real_sector import defence_share
     assert 0.75 < defence_share() < 0.95  # military pay dominates section O in 2025
     p = payload("b1_payload")
-    sec = p["B1_REAL!A59:H69"]
-    r = {row[0]: 59 + i for i, row in enumerate(sec) if row and row[0]}
-    assert p["B1_REAL!A17:G29"][10][4] == f"=E{r['GVA_O']}"  # row 27 takes section O from the split
-    assert "B4_LABOUR!H17:K17" in sec[r["MIL_NY"] - 59][4]  # defence follows military headcount
-    assert "OK: численность военных" in sec[r["O_CHK"] - 59][4]
+    sec = p["B1_REAL!A65:H75"]
+    r = {row[0]: 65 + i for i, row in enumerate(sec) if row and row[0]}
+    assert p["B1_REAL!A17:G31"][10][4] == f"=E{r['GVA_O']}"  # row 27 takes section O from the split
+    assert "B4_LABOUR!H17:K17" in sec[r["MIL_NY"] - 65][4]  # defence follows military headcount
+    assert "OK: численность военных" in sec[r["O_CHK"] - 65][4]
 
 
 def test_peace_gov_imports():
     p = payload("b2_payload")
     rows = {r[0]: r for r in p["B2_DEMAND!A18:G27"] if r and r[0]}
-    assert "B1_REAL!F$68" in rows["GDPE_GOV"][5]  # G follows section O output in B1
+    assert "B1_REAL!F$74" in rows["GDPE_GOV"][5]  # G follows section O output in B1
     assert "COEFS!$E$169*F$15" in rows["GDPE_IMP"][5]
     assert rows["GDPE_EXP"][5].startswith("=COEFS!$E$196*B10_AGRO!F41+")  # agro part of exports follows B10  # defence imports follow real defence spending
     c = {r[0]: r[4] for r in p["COEFS!A168:L170"]}
@@ -178,7 +178,7 @@ def test_peace_gov_imports():
 
 def test_construction_reconstruction():
     p = payload("b1_payload")
-    f = p["B1_REAL!A17:G29"][6]
+    f = p["B1_REAL!A17:G31"][6]
     assert f[0] == "GVA_F" and f[5] == "=B9_CONSTRUCTION!F26"
 
 
@@ -209,10 +209,10 @@ def test_manufacturing_blocks():
     assert abs(sum(m["w"].values()) - 1) < 1e-9 and all(v > 0 for v in m["w"].values())
     assert m["fits"]["MACH"]["coef"]["GFCF"] > 0 and m["fits"]["LINK"]["r2"] > 0.9
     p = payload("b1_payload")
-    sec = p["B1_REAL!A71:H82"]
-    r = {row[0]: 71 + i for i, row in enumerate(sec) if row and row[0]}
-    assert p["B1_REAL!A17:G29"][4][5] == f"=F{r['GVA_C_BU']}"  # row 21 takes the bottom-up block sum
-    assert "B2_DEMAND" not in sec[r["C_OPK"] - 71][5]  # no loop through GDP of the same year
+    sec = p["B1_REAL!A77:H88"]
+    r = {row[0]: 77 + i for i, row in enumerate(sec) if row and row[0]}
+    assert p["B1_REAL!A17:G31"][4][5] == f"=F{r['GVA_C_BU']}"  # row 21 takes the bottom-up block sum
+    assert "B2_DEMAND" not in sec[r["C_OPK"] - 77][5]  # no loop through GDP of the same year
 
 
 def test_agro_block():
@@ -245,9 +245,13 @@ def test_scenario_logic():
 def test_other_split():
     from macromodel.blocks.real_sector import other_coef_rows, other_parts
     p = payload("b1_payload")
-    sec = p["B1_REAL!A85:H92"]
-    r = {row[0]: 85 + i for i, row in enumerate(sec) if row and row[0]}
-    assert p["B1_REAL!A17:G29"][11][5] == f"=F{r['OTHER_BU']}"  # row 28 takes the bottom-up sum of three parts
+    sec = p["B1_REAL!A91:H98"]
+    r = {row[0]: 91 + i for i, row in enumerate(sec) if row and row[0]}
+    s2 = p["B1_REAL!A17:G31"]
+    assert [x[0] for x in s2[11:14]] == ["GVA_OT_TAX", "GVA_OT_MKT", "GVA_OT_PUB"]  # rows 28-30: the three parts, no lump
+    assert [x[5] for x in s2[11:14]] == [f"=F{r[k]}" for k in ("OT_TAX", "OT_MKT", "OT_PUB")]
+    q = p["B1_REAL!A32:BK47"]
+    assert q[-1][-1] == "=SUM(BK35:BK46)" and "$E$30:$G$30" in q[-2][-1]  # GDP = sectors + parts
     w = other_parts()["w"]
     assert abs(sum(w.values()) - 1) < 1e-9 and all(v > 0.1 for v in w.values())
     c = {(row["eq"], row["var"]): row["coef"] for row in other_coef_rows()}
@@ -258,11 +262,11 @@ def test_other_split():
 def test_pub_services():
     from macromodel.blocks.real_sector import pub_prices
     p = payload("b1_payload")
-    t = p["B1_REAL!A94:H104"]
-    r = {row[0]: 94 + i for i, row in enumerate(t) if row and row[0]}
-    assert p["B1_REAL!A85:H92"][4][5] == f"=F{r['PUB_REAL']}"  # row 89 takes real growth = fund over rates
-    assert t[r["PUB_RATE"] - 94][4].startswith("=MAX(")  # rates never below the CPI floor
-    assert "SCENARIOS!M194" in t[r["PUB_FUND"] - 94][5]
+    t = p["B1_REAL!A100:H110"]
+    r = {row[0]: 100 + i for i, row in enumerate(t) if row and row[0]}
+    assert p["B1_REAL!A91:H98"][4][5] == f"=F{r['PUB_REAL']}"  # row 95 takes real growth = fund over rates
+    assert t[r["PUB_RATE"] - 100][4].startswith("=MAX(")  # rates never below the CPI floor
+    assert "SCENARIOS!M194" in t[r["PUB_FUND"] - 100][5]
     pp = pub_prices()
     assert 0.5 < pp["coef"]["MINW"] < 1.2 and pp["r2"] > 0.5  # history: the deflator followed the minimum wage
     assert "SCENARIOS!A191:O194" in p  # pay fund defaults, written only without --coefs

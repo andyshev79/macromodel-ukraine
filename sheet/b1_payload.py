@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from macromodel.blocks.real_sector import (SECTORS, annual_growth, coef_table, manuf_coef_rows, manuf_data, other_coef_rows, pub_prices,
-                                          other_parts, real_levels_q)
+                                          other_parts, other_parts_levels, real_levels_q)
 from macromodel.blocks.demand import link_other_to_consumption
 from macromodel.blocks.shocks import SHOCK_ROW, SHOCKS, estimated
 
@@ -27,8 +27,15 @@ def col(i: int) -> str:
 
 QCOL = {q: col(7 + i) for i, q in enumerate(QUARTERS)}  # 2015Q1 -> H, same as ANCHORS
 LAST = "2026Q2"
-CODES = list(SECTORS) + ["OTHER"]
-NAMES = dict(SECTORS, OTHER="Прочие отрасли и чистые налоги")
+# GVA_OTHER is shown by its three parts (section 7); their sum is GVA_OTHER
+PARTS = ["OT_TAX", "OT_MKT", "OT_PUB"]
+CODES = list(SECTORS) + PARTS
+NAMES = dict(SECTORS, OT_TAX="Чистые налоги на продукты",
+             OT_MKT="Прочие рыночные услуги: недвижимость, финансы, профуслуги, гостиницы, водоснабжение, искусство",
+             OT_PUB="Образование и здравоохранение")
+# row layout: section 2 rows 19-30 (GDP 31), section 3 rows 35-46 (GDP 47), section 4 rows 51-63
+S2, S3, S4 = 19, 35, 51
+GDP2, GDP3 = S2 + len(CODES), S3 + len(CODES)
 
 coefs = coef_table()
 crow = {(r["eq"], r["var"]): 5 + i for i, r in enumerate(coefs)}
@@ -54,7 +61,7 @@ out["COEFS!A5:L22"] = [[f"GVA_{r['eq'][4:]}_{r['var']}", "B1", r["eq"], r["var"]
 text = [
     ["1. Реальный сектор"],
     [""],
-    ["Что считает", "Реальная ВДС по 9 отраслям и прочим, сумма = ВВП по производству (GDP_REAL_P)"],
+    ["Что считает", "Реальная ВДС по 9 отраслям, прочим рыночным услугам, образованию и здравоохранению плюс чистые налоги; сумма = ВВП по производству (GDP_REAL_P)"],
     ["Берёт", "SCENARIOS (урожай, порты, мощность энергосистемы, ВВП еврозоны, оборона), COEFS"],
     ["Пишет в ANCHORS", "GDP_REAL_P (и GDP_REAL на прогнозе, пока нет B2)"],
     ["Статус", "в работе: версия 1"],
@@ -84,16 +91,16 @@ g = annual_growth(real_levels_q())
 F_REC_ROW = 171  # after B2 peace rows 168-170
 ACT = dict(zip("EFG", "LMN"))  # active-scenario columns in SCENARIOS
 CB_CODES = ["C_MET", "C_FOOD", "C_MACH_CIV", "C_OPK", "C_MACH", "C_OTH", "IND_C_BU", "GVA_C_BU", "GVA_C_TD", "C_CHK"]
-CB_ROW = {k: 73 + i for i, k in enumerate(CB_CODES)}
+CB_ROW = {k: 79 + i for i, k in enumerate(CB_CODES)}
 out[f"COEFS!A{F_REC_ROW}:L{F_REC_ROW}"] = [["GVA_F_REC", "B1", "GVA_F", "REC", 1.0, "", "", "", "калибровка", "", "2026-10-25",
     "Восстановление: строительство растёт на те же п.п., что ВНОК (SCENARIOS строка 124). Строительство — около "
     "половины ВНОК; машины и оборудование в основном импорт. Оценка Claude"]]
 O_CODES = ["MIL_NY", "ADM_N", "DEF_G", "ADM_G", "DEF_NOM_G", "ADM_NOM_G", "DEF_SH", "GVA_O", "O_CHK"]
-O_ROW = {k: 61 + i for i, k in enumerate(O_CODES)}
+O_ROW = {k: 67 + i for i, k in enumerate(O_CODES)}
 OT_CODES = ["OT_TAX", "OT_MKT", "OT_PUB", "OTHER_BU", "OTHER_TD", "OT_CHK"]
-OT_ROW = {k: 87 + i for i, k in enumerate(OT_CODES)}
+OT_ROW = {k: 93 + i for i, k in enumerate(OT_CODES)}
 PB_CODES = ["PUB_MINW", "PUB_CIV", "PUB_CPI", "PUB_RATE", "PUB_RATE_H", "PUB_FUND", "PUB_REAL", "PUB_CHK", "PUB_FLOOR"]
-PB_ROW = {k: 96 + i for i, k in enumerate(PB_CODES)}
+PB_ROW = {k: 102 + i for i, k in enumerate(PB_CODES)}
 PUB_SC = 194  # SCENARIOS: education and health pay fund, active columns L:N
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
@@ -109,48 +116,56 @@ eq = {
     "J": ("тренд 2024–2025", lambda c, p: f"={C('J','const')}"),
     "O": ("доля обороны × рост численности военных + доля госуправления × рост штата (раздел 5)",
           lambda c, p: f"={c}{O_ROW['GVA_O']}"),
-    "OTHER": ("снизу вверх: налоги на продукты, рыночные услуги, образование и здравоохранение (раздел 7)",
-              lambda c, p: f"={c}{OT_ROW['OTHER_BU']}"),
+    "OT_TAX": ("потребление домохозяйств и ВНОК (раздел 7)", lambda c, p: f"={c}{OT_ROW['OT_TAX']}"),
+    "OT_MKT": ("потребление домохозяйств и мощность энергосистемы (раздел 7)", lambda c, p: f"={c}{OT_ROW['OT_MKT']}"),
+    "OT_PUB": ("фонд оплаты труда сверх ставок (раздел 7а)", lambda c, p: f"={c}{OT_ROW['OT_PUB']}"),
 }
+op = other_parts()
+lv = real_levels_q().join(other_parts_levels().rename(columns=lambda k: f"OT_{k}"))
+# Ukrstat sections end before the last fact quarter: split GVA_OTHER by the shares of the same quarter a year ago
+for q in lv.index[lv[PARTS].isna().any(axis=1) & lv["OTHER"].notna()]:
+    sh = lv.shift(4).loc[q, PARTS] / lv.shift(4).loc[q, PARTS].sum()
+    lv.loc[q, PARTS] = (sh * lv.loc[q, "OTHER"]).values
+g = annual_growth(lv)
+code = lambda s: f"GVA_{s}"
 rows = [["2. Рост реальной ВДС, % г/г"], ["Код", "Отрасль", "Уравнение", 2025, 2026, 2027, 2028]]
 for s in CODES:
     txt, f = eq[s]
-    rows.append([f"GVA_{s}", NAMES[s], txt, round(float(g.loc["2025", s]), 1)] + [f(c, p) for c, p in zip("EFG", "DEF")])
-sumif = lambda c, yr: f"SUMIF($H$31:$BK$31;{yr};$H$43:$BK$43)"
+    rows.append([code(s), NAMES[s], txt, round(float(g.loc["2025", s]), 1)] + [f(c, p) for c, p in zip("EFG", "DEF")])
+sumif = lambda c, yr: f"SUMIF($H${S3 - 2}:$BK${S3 - 2};{yr};$H${GDP3}:$BK${GDP3})"
 rows.append(["GDP_REAL_P", "ВВП по производству", "сумма отраслей"] +
             [f"={sumif(c, c + '$18')}/{sumif(c, c + '$18-1')}*100-100" for c in "DEFG"])
-out["B1_REAL!A17:G29"] = rows
+out[f"B1_REAL!A17:G{GDP2}"] = rows
 
-lv = real_levels_q()
 hdr = [["3. Реальная ВДС по кварталам, млн грн в ценах 2021"],
        ["", "", "", "", "", "", "Год"] + [f"=ANCHORS!{QCOL[q]}2" for q in QUARTERS],
        ["Код", "Отрасль", "", "", "", "", ""] + [f"=ANCHORS!{QCOL[q]}4" for q in QUARTERS]]
 body = []
 for k, s in enumerate(CODES):
-    r = 33 + k
-    line = [f"GVA_{s}", NAMES[s], "", "", "", "", ""]
+    r = S3 + k
+    line = [code(s), NAMES[s], "", "", "", "", ""]
     for i, q in enumerate(QUARTERS):
         if q <= LAST:
             line.append(round(float(lv.loc[q, s]), 1))
         else:
             c, p = QCOL[q], QCOL[QUARTERS[i - 4]]
-            line.append(f"={p}{r}*(1+INDEX($E${19 + k}:$G${19 + k};MATCH({c}$31;$E$18:$G$18;0))/100)")
+            line.append(f"={p}{r}*(1+INDEX($E${S2 + k}:$G${S2 + k};MATCH({c}${S3 - 2};$E$18:$G$18;0))/100)")
     body.append(line)
-body.append(["GDP_REAL_P", "ВВП по производству", "", "", "", "", ""] + [f"=SUM({QCOL[q]}33:{QCOL[q]}42)" for q in QUARTERS])
-out["B1_REAL!A30:BK43"] = [r for r in hdr] + body
+body.append(["GDP_REAL_P", "ВВП по производству", "", "", "", "", ""] + [f"=SUM({QCOL[q]}{S3}:{QCOL[q]}{GDP3 - 1})" for q in QUARTERS])
+out[f"B1_REAL!A{S3 - 3}:BK{GDP3}"] = [r for r in hdr] + body
 
-contrib = [["4. Вклад отраслей в рост ВВП, п.п. г/г"], ["Код", "Отрасль", "", "", "", "", ""] + [f"={QCOL[q]}32" for q in QUARTERS]]
+contrib = [["4. Вклад отраслей в рост ВВП, п.п. г/г"], ["Код", "Отрасль", "", "", "", "", ""] + [f"={QCOL[q]}{S3 - 1}" for q in QUARTERS]]
 for k, s in enumerate(CODES + ["GDP"]):
-    r = 33 + k
-    line = [f"GVA_{s}" if s != "GDP" else "GDP_REAL_P", NAMES.get(s, "Рост ВВП, % г/г"), "", "", "", "", ""]
+    r = S3 + k
+    line = [code(s) if s != "GDP" else "GDP_REAL_P", NAMES.get(s, "Рост ВВП, % г/г"), "", "", "", "", ""]
     for i, q in enumerate(QUARTERS):
         if i < 4:
             line.append("")
         else:
             c, p = QCOL[q], QCOL[QUARTERS[i - 4]]
-            line.append(f"=IFERROR(({c}{r}-{p}{r})/{p}$43*100;\"\")")
+            line.append(f"=IFERROR(({c}{r}-{p}{r})/{p}${GDP3}*100;\"\")")
     contrib.append(line)
-out["B1_REAL!A45:BK57"] = contrib
+out[f"B1_REAL!A{S4 - 2}:BK{S4 + len(CODES)}"] = contrib
 
 # 5. Section O split (input method for non-market output): real defence GVA follows military headcount
 # (B4 MIL_N), real public administration follows civilian staff; nominal GVA = pay fund (+ ESV).
@@ -199,8 +214,8 @@ sec = [["5. Госуправление и оборона (раздел O): об�
         f"{c}{r['ADM_G']}<={num(hi)});\"OK: численность военных (сценарий)\";\"ВНИМАНИЕ: штат госуправления\"))" for c in "EFG"] +
        ["выход за коридор, объяснённый численностью военных из сценария (демобилизация, мобилизация), — OK; "
         "ВНИМАНИЕ, только если вне коридора и госуправление"]]
-assert len(sec) == O_ROW["O_CHK"] - 58
-out[f"B1_REAL!A59:H{O_ROW['O_CHK']}"] = sec
+assert len(sec) == O_ROW["O_CHK"] - 64
+out[f"B1_REAL!A65:H{O_ROW['O_CHK']}"] = sec
 
 # 6. Manufacturing by blocks (bottom-up) with the old equation as a top-down check
 MC_FIRST = 172  # after GVA_F_REC (171)
@@ -226,7 +241,7 @@ cb = [["6. Переработка по блокам: снизу вверх, св
       [f"={M('GVA_C_MACH','const')}+{M('GVA_C_MACH','GFCF')}*{gfcf_x(c)}" for c in "EFG"] +
       ["ВНОК = константа + ставка (B7) + восстановление; акселератор по ВВП убран, иначе циклическая ссылка"],
       ["C_OPK", "ОПК", "рост реальных расходов на оборону: доля в ВВП (строка 15) × рост ВВП прошлого года", ""] +
-      [f"=({c}$15/{pc[c]}$15)*(1+{pc[c]}$29/100)*100-100" for c in "EFG"] +
+      [f"=({c}$15/{pc[c]}$15)*(1+{pc[c]}${GDP2}/100)*100-100" for c in "EFG"] +
       ["в мирном сценарии падает вместе с оборонными расходами; ВВП прошлого года — иначе циклическая ссылка"],
       ["C_MACH", "Машиностроение с ОПК", f"доля ОПК {mv('GVA_C_MACH','OPK_SH')} (оценка) × ОПК + остальное × гражданское", ""] +
       [f"={M('GVA_C_MACH','OPK_SH')}*{c}{R['C_OPK']}+(1-{M('GVA_C_MACH','OPK_SH')})*{c}{R['C_MACH_CIV']}" for c in "EFG"] +
@@ -248,8 +263,8 @@ cb = [["6. Переработка по блокам: снизу вверх, св
       [f"=IF(ABS({c}{R['GVA_C_BU']}-{c}{R['GVA_C_TD']})<=3;\"OK\";\"ВНИМАНИЕ: расхождение \"&ROUND({c}{R['GVA_C_BU']}-{c}{R['GVA_C_TD']};1)"
        f"&\" п.п.\"&IF(ABS({c}$16-{pc[c]}$16)>10;\" (металлургия: вес в индексе {mv('GVA_C_W','MET')} против {met['MET_C']} в уравнении сверху)\";\"\"))" for c in "EFG"] +
       ["главное различие — вес металлургии: в индексе Госстата он мал, уравнение сверху ловит и смежные отрасли"]]
-assert len(cb) == R["C_CHK"] - 70
-out[f"B1_REAL!A71:H{R['C_CHK']}"] = cb
+assert len(cb) == R["C_CHK"] - 76
+out[f"B1_REAL!A77:H{R['C_CHK']}"] = cb
 
 # 7. Other sectors and net taxes by parts (bottom-up) with the old consumption equation as a top-down check
 OT_FIRST = 204  # after B10 (196-203)
@@ -261,7 +276,6 @@ out[f"COEFS!A{OT_FIRST}:L{OT_FIRST + len(oc) - 1}"] = [
      "" if r["r2"] is None else float(r["r2"]), "2026-10-26", r["note"]] for r in oc]
 O = lambda eq, v: f"COEFS!$E${orow[(eq, v)]}"
 ov = lambda eq, v: num(next(r["coef"] for r in oc if (r["eq"], r["var"]) == (eq, v)))
-op = other_parts()
 og = lambda k: round(float(op["growth"].loc["2025", k]), 1)
 osh = {k: num(round(v * 100, 1)) for k, v in op["share"].items()}
 R7 = OT_ROW
@@ -283,14 +297,14 @@ ot = [["7. Прочие отрасли и чистые налоги по час�
        f"веса: налоги {ov('GVA_OT_W','TAX')}, рыночные услуги {ov('GVA_OT_W','MKT')}, образование и здравоохранение {ov('GVA_OT_W','PUB')}",
        round(float(g.loc["2025", "OTHER"]), 1)] +
       [f"={O('GVA_OT_W','TAX')}*{c}{R7['OT_TAX']}+{O('GVA_OT_W','MKT')}*{c}{R7['OT_MKT']}+{O('GVA_OT_W','PUB')}*{c}{R7['OT_PUB']}"
-       for c in "EFG"] + ["идёт в строку 28; веса — реальные доли 2025"],
+       for c in "EFG"] + ["сверка: в разделе 2 части идут отдельно (строки 28–30), их сумма в кварталах = прочие; веса — реальные доли 2025"],
       ["OTHER_TD", "Прочие отрасли и налоги сверху вниз", f"{kv('OTHER','const')} + {num(link_other_to_consumption()['coef']['HH'])} × потребление домохозяйств", ""] +
       [f"={C('OTHER','const')}+COEFS!$E$35*B2_DEMAND!{c}$20" for c in "EFG"] + ["прежнее уравнение, оставлено для сверки"],
       ["OT_CHK", "Сверка снизу вверх и сверху вниз", "расхождение до 2 п.п. — OK", ""] +
       [f"=IF(ABS({c}{R7['OTHER_BU']}-{c}{R7['OTHER_TD']})<=2;\"OK\";\"ВНИМАНИЕ: расхождение \"&ROUND({c}{R7['OTHER_BU']}-{c}{R7['OTHER_TD']};1)&\" п.п.\")"
        for c in "EFG"] + ["снизу вверх видит ВНОК (налоги) и энергию (услуги), сверху — только потребление"]]
-assert len(ot) == R7["OT_CHK"] - 84
-out[f"B1_REAL!A85:H{R7['OT_CHK']}"] = ot
+assert len(ot) == R7["OT_CHK"] - 90
+out[f"B1_REAL!A91:H{R7['OT_CHK']}"] = ot
 
 # 7a. Education and health: pay rates follow government decisions (minimum wage, raises of civilian budget
 # staff), at least half of CPI; the nominal follows the pay fund in SCENARIOS; real growth = fund over rates.
@@ -320,7 +334,7 @@ pb = [["7а. Образование и здравоохранение: став�
       ["PUB_FUND", "Фонд оплаты труда образования и здравоохранения", f"% к прошлому году, SCENARIOS строка {PUB_SC}", round(float(ph.NOM), 1)] +
       [f"=SCENARIOS!{SC[c]}{PUB_SC}" for c in "EFG"] + ["2025 — номинальная ВДС разделов P и Q"],
       ["PUB_REAL", "Реальный рост образования и здравоохранения", "(1 + фонд) / (1 + ставки) − 1", round(float(ph.REAL), 1)] +
-      [f"=((1+{c}{P['PUB_FUND']}/100)/(1+{c}{P['PUB_RATE']}/100)-1)*100" for c in "EFG"] + ["идёт в строку 89"],
+      [f"=((1+{c}{P['PUB_FUND']}/100)/(1+{c}{P['PUB_RATE']}/100)-1)*100" for c in "EFG"] + ["идёт в строку 95 и в строку 30"],
       ["PUB_CHK", "Проверка: реальный рост против истории", f"история 2015–2025 без 2022: от {num(lo)} до {num(hi)}%", ""] +
       [f"=IF(OR({c}{P['PUB_REAL']}<{flo};{c}{P['PUB_REAL']}>{fhi});\"ВНИМАНИЕ: вне истории\";"
        f"IF({c}{P['PUB_FUND']}<{c}{P['PUB_RATE']};\"ВНИМАНИЕ: фонд растёт медленнее ставок — сокращение штата или часов\";\"OK\"))" for c in "EFG"] +
@@ -329,8 +343,8 @@ pb = [["7а. Образование и здравоохранение: став�
       [f"=IF({O('GVA_OT_PUB','MINW_W')}*{c}{P['PUB_MINW']}+(1-{O('GVA_OT_PUB','MINW_W')})*{c}{P['PUB_CIV']}<{O('GVA_OT_PUB','CPI_FLOOR')}*{c}{P['PUB_CPI']};"
        f"\"ВНИМАНИЕ: решений мало, ставки подняты до ½ инфляции\";\"OK\")" for c in "EFG"] +
       [f"в 2025 правило не выполнилось: ставки +{num(round(float(ph.DEFL), 1))}% при инфляции {num(round(float(ph.CPI), 1))}% (минимальная заморожена)"]]
-assert len(pb) == P["PUB_FLOOR"] - 93
-out[f"B1_REAL!A94:H{P['PUB_FLOOR']}"] = pb
+assert len(pb) == P["PUB_FLOOR"] - 99
+out[f"B1_REAL!A100:H{P['PUB_FLOOR']}"] = pb
 
 # SCENARIOS defaults for the pay fund (Claude estimates; 2026 from the budget law). Written only without --coefs.
 PUB_FUND = {"Base": [25.5, 14, 10], "Pess": [25.5, 8, 6], "Opt": [25.5, 15, 12]}

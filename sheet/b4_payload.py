@@ -236,7 +236,7 @@ add("Код", "Показатель", "Как считается", 2025, 2026, 2
 Y = ["D", "E", "F", "G"]
 yq = lambda i, code: f"{COLS[4 * i]}{r[code]}:{COLS[4 * i + 3]}{r[code]}"
 yline = lambda code, name, eq, f, comment="", first=0: add(code, name, eq, *[f(i) if i >= first else "" for i in range(4)], comment)
-yline("Y_GDP", "Рост реального ВВП", "B1_REAL", lambda i: f"=B1_REAL!{Y[i]}29")
+yline("Y_GDP", "Рост реального ВВП", "B1_REAL", lambda i: f"=B1_REAL!{Y[i]}31")
 yline("Y_CPI", "ИПЦ, средний за год", "B3_PRICES", lambda i: f"=B3_PRICES!{Y[i]}20")
 yline("Y_LF", "Рабочая сила", "среднее кварталов", lambda i: f"=AVERAGE({yq(i, 'LF')})", "тыс. человек")
 yline("Y_UNEMP", "Уровень безработицы", "среднее кварталов", lambda i: f"=AVERAGE({yq(i, 'UNEMP')})", "%")
