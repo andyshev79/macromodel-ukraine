@@ -365,3 +365,37 @@ def gdp_sections_q(path: Path) -> pd.DataFrame:
     yoy = [c for c in df.columns if c.endswith("_YOY")]
     df[yoy] = df[yoy].where(df[yoy].abs() < 80)  # the sheet mixes % y/y and index (100 = no change) in early years
     return df
+
+
+DOLLAR_FX = {"USD_EOP": "- до долара США", "EUR_EOP": "- до євро"}
+DOLLAR_REMIT = {"REM_TOT": "Приватні перекази (2.+ 3.)", "REM_WAGE": "2. Чиста оплата праці", "REM_TRANSF": "3. Приватні трансферти",
+                "REM_OFF": "Офіційні канали", "REM_INF": "Неформальні канали"}
+
+
+def dollar_m(path: Path, last: str = "") -> pd.DataFrame:
+    """Sheet Dollar: official UAH rate to USD and EUR at month end (row 1 holds the month dates; the sheet
+    also carries Andrey's own projections for the rest of the year, so `last` cuts them off) and private
+    remittances to Ukraine, USD million, by kind and channel (NBU Perekaz_m; block "1.1", one column per
+    month from January 2018, the month labels are in the row above the first series)."""
+    rows = _rows(path, "Dollar")
+    label = lambda r: str(_cell(r, 0) or "").strip()
+    out = {}
+    dates = {j: v for j, v in enumerate(rows[0]) if isinstance(v, datetime)}
+    for code, text in DOLLAR_FX.items():
+        r = next(r for r in rows if label(r).startswith(text))
+        out[code] = pd.Series({f"{d:%Y-%m}": _num(_cell(r, j)) for j, d in dates.items()})
+    start = next(i for i, r in enumerate(rows) if label(r).startswith("1.1 Динаміка обсягів приватних"))
+    block = rows[start:start + 25]
+    months = next(r for r in block if any(isinstance(v, str) and v.startswith("січ") for v in r))
+    first = next(j for j, v in enumerate(months) if isinstance(v, str) and v.startswith("січ"))
+    cols = []
+    for j in range(first, len(months)):
+        if not (isinstance(months[j], str) and months[j][:3].isalpha() and months[j] not in ("m/m", "y/y")):
+            break
+        cols.append(j)
+    idx = pd.period_range("2018-01", periods=len(cols), freq="M").strftime("%Y-%m")
+    for code, text in DOLLAR_REMIT.items():
+        r = next(r for r in block if label(r).startswith(text))
+        out[code] = pd.Series([_num(_cell(r, j)) for j in cols], index=idx)
+    df = pd.DataFrame(out).sort_index()
+    return df.loc[:last] if last else df
