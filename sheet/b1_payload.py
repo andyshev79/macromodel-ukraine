@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from macromodel.blocks.real_sector import SECTORS, annual_growth, coef_table, manuf_coef_rows, manuf_data, real_levels_q
+from macromodel.blocks.real_sector import (SECTORS, annual_growth, coef_table, manuf_coef_rows, manuf_data, other_coef_rows,
+                                          other_parts, real_levels_q)
+from macromodel.blocks.demand import link_other_to_consumption
 from macromodel.blocks.shocks import SHOCK_ROW, SHOCKS, estimated
 
 QUARTERS = [f"{y}Q{q}" for y in range(2015, 2029) for q in range(1, 5)]
@@ -88,6 +90,8 @@ out[f"COEFS!A{F_REC_ROW}:L{F_REC_ROW}"] = [["GVA_F_REC", "B1", "GVA_F", "REC", 1
     "половины ВНОК; машины и оборудование в основном импорт. Оценка Claude"]]
 O_CODES = ["MIL_NY", "ADM_N", "DEF_G", "ADM_G", "DEF_NOM_G", "ADM_NOM_G", "DEF_SH", "GVA_O", "O_CHK"]
 O_ROW = {k: 61 + i for i, k in enumerate(O_CODES)}
+OT_CODES = ["OT_TAX", "OT_MKT", "OT_PUB", "OTHER_BU", "OTHER_TD", "OT_CHK"]
+OT_ROW = {k: 87 + i for i, k in enumerate(OT_CODES)}
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
     "B": (f"{kv('B','const')} + {kv('B','PORTS')} × рост портов + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
@@ -102,8 +106,8 @@ eq = {
     "J": ("тренд 2024–2025", lambda c, p: f"={C('J','const')}"),
     "O": ("доля обороны × рост численности военных + доля госуправления × рост штата (раздел 5)",
           lambda c, p: f"={c}{O_ROW['GVA_O']}"),
-    "OTHER": ("−2,68 + 0,77 × рост потребления домохозяйств (B2)",
-              lambda c, p: f"={C('OTHER','const')}+COEFS!$E$35*B2_DEMAND!{c}$20"),
+    "OTHER": ("снизу вверх: налоги на продукты, рыночные услуги, образование и здравоохранение (раздел 7)",
+              lambda c, p: f"={c}{OT_ROW['OTHER_BU']}"),
 }
 rows = [["2. Рост реальной ВДС, % г/г"], ["Код", "Отрасль", "Уравнение", 2025, 2026, 2027, 2028]]
 for s in CODES:
@@ -243,5 +247,46 @@ cb = [["6. Переработка по блокам: снизу вверх, св
       ["главное различие — вес металлургии: в индексе Госстата он мал, уравнение сверху ловит и смежные отрасли"]]
 assert len(cb) == R["C_CHK"] - 70
 out[f"B1_REAL!A71:H{R['C_CHK']}"] = cb
+
+# 7. Other sectors and net taxes by parts (bottom-up) with the old consumption equation as a top-down check
+OT_FIRST = 204  # after B10 (196-203)
+oc = other_coef_rows()
+orow = {(r["eq"], r["var"]): OT_FIRST + i for i, r in enumerate(oc)}
+out[f"COEFS!A{OT_FIRST}:L{OT_FIRST + len(oc) - 1}"] = [
+    [f"{r['eq']}_{r['var']}", "B1", r["eq"], r["var"], float(r["coef"]), "" if r["se"] is None else float(r["se"]),
+     "" if not r["se"] else round(float(r["coef"]) / float(r["se"]), 1), r["period"], r["method"],
+     "" if r["r2"] is None else float(r["r2"]), "2026-10-26", r["note"]] for r in oc]
+O = lambda eq, v: f"COEFS!$E${orow[(eq, v)]}"
+ov = lambda eq, v: num(next(r["coef"] for r in oc if (r["eq"], r["var"]) == (eq, v)))
+op = other_parts()
+og = lambda k: round(float(op["growth"].loc["2025", k]), 1)
+osh = {k: num(round(v * 100, 1)) for k, v in op["share"].items()}
+R7 = OT_ROW
+ot = [["7. Прочие отрасли и чистые налоги по частям: снизу вверх, сверка с уравнением сверху"],
+      ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
+      ["OT_TAX", "Чистые налоги на продукты", f"{ov('GVA_OT_TAX','const')} + {ov('GVA_OT_TAX','HH')} × потребление домохозяйств + "
+       f"{ov('GVA_OT_TAX','GFCF')} × ВНОК без акселератора", og("TAX")] +
+      [f"={O('GVA_OT_TAX','const')}+{O('GVA_OT_TAX','HH')}*B2_DEMAND!{c}$20+{O('GVA_OT_TAX','GFCF')}*{gfcf_x(c)}" for c in "EFG"] +
+      [f"{osh['TAX']}% ВВП в 2025; НДС берётся с покупки, импорт отдельно незначим; ВНОК без акселератора — иначе циклическая ссылка"],
+      ["OT_MKT", "Рыночные услуги: недвижимость, финансы, профессиональные, гостиницы и другие",
+       f"{ov('GVA_OT_MKT','const')} + {ov('GVA_OT_MKT','HH')} × потребление домохозяйств + {ov('GVA_OT_MKT','CAP')} × рост мощности энергосистемы",
+       og("MKT")] +
+      [f"={O('GVA_OT_MKT','const')}+{O('GVA_OT_MKT','HH')}*B2_DEMAND!{c}$20+{O('GVA_OT_MKT','CAP')}*({c}$13/{pc[c]}$13-1)*100" for c in "EFG"] +
+      [f"{osh['MKT']}% ВВП; энергия — оценка Claude (отключения, разрушения)"],
+      ["OT_PUB", "Образование и здравоохранение", f"средний рост 2016–2025 без 2022: {ov('GVA_OT_PUB','const')}%", og("PUB")] +
+      [f"={O('GVA_OT_PUB','const')}" for c in "EFG"] +
+      [f"{osh['PUB']}% ВВП; нерыночные услуги, Госстат меряет затратами; связь со штатом и бюджетом в данных не найдена"],
+      ["OTHER_BU", "Прочие отрасли и налоги снизу вверх",
+       f"веса: налоги {ov('GVA_OT_W','TAX')}, рыночные услуги {ov('GVA_OT_W','MKT')}, образование и здравоохранение {ov('GVA_OT_W','PUB')}",
+       round(float(g.loc["2025", "OTHER"]), 1)] +
+      [f"={O('GVA_OT_W','TAX')}*{c}{R7['OT_TAX']}+{O('GVA_OT_W','MKT')}*{c}{R7['OT_MKT']}+{O('GVA_OT_W','PUB')}*{c}{R7['OT_PUB']}"
+       for c in "EFG"] + ["идёт в строку 28; веса — реальные доли 2025"],
+      ["OTHER_TD", "Прочие отрасли и налоги сверху вниз", f"{kv('OTHER','const')} + {num(link_other_to_consumption()['coef']['HH'])} × потребление домохозяйств", ""] +
+      [f"={C('OTHER','const')}+COEFS!$E$35*B2_DEMAND!{c}$20" for c in "EFG"] + ["прежнее уравнение, оставлено для сверки"],
+      ["OT_CHK", "Сверка снизу вверх и сверху вниз", "расхождение до 2 п.п. — OK", ""] +
+      [f"=IF(ABS({c}{R7['OTHER_BU']}-{c}{R7['OTHER_TD']})<=2;\"OK\";\"ВНИМАНИЕ: расхождение \"&ROUND({c}{R7['OTHER_BU']}-{c}{R7['OTHER_TD']};1)&\" п.п.\")"
+       for c in "EFG"] + ["снизу вверх видит ВНОК (налоги) и энергию (услуги), сверху — только потребление"]]
+assert len(ot) == R7["OT_CHK"] - 84
+out[f"B1_REAL!A85:H{R7['OT_CHK']}"] = ot
 
 json.dump(out, sys.stdout, ensure_ascii=False)

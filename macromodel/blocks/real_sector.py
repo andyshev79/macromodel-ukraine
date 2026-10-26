@@ -267,3 +267,71 @@ def manuf_coef_rows() -> list[dict]:
                  "note": "Доля ОПК в блоке машиностроения, растёт с реальными расходами на оборону. Оценка Claude: в индексе "
                          "Госстата ОПК не виден (связь машиностроения с расходами на оборону отрицательная)"})
     return rows
+
+
+# Other sectors and net taxes by parts (2026-10-26, agreed with Andrey). GVA_OTHER (a third of GDP) mixes
+# three things with different wartime drivers: net taxes on products (VAT and excises on final purchases),
+# market services (E, I, K, L, M, N, R, S) and non-market public services (P education, Q health).
+OT_MKT = list("EIKLMNRS")
+OT_PUB = ["P", "Q"]
+OT_YEAR = "2025"  # weights: real shares of the parts in GVA_OTHER
+OT_FIRST = "2016Q1"
+OT_CALIBRATED = {
+    ("MKT", "CAP"): (0.1, "Рыночные услуги от мощности энергосистемы: отключения света и разрушения. Оценка Claude: "
+                          "треть эластичности переработки (0,3), у услуг больше генераторов и меньше энергоёмкость"),
+    ("PUB", "const"): (1.5, "Образование и здравоохранение: средний рост 2016–2025 без 2022. Связь с численностью "
+                            "работников и реальными бюджетными расходами в данных не найдена (незначима или обратный знак)"),
+}
+
+
+def other_parts_levels() -> pd.DataFrame:
+    """Real levels (2021 prices) of market services, public services and net taxes (GVA_OTHER minus the
+    two groups of sections; chain-linking leaves a small non-additive residual in the taxes)."""
+    s = pd.read_csv(EXT / "gdp_sections_q.csv", index_col="quarter")
+    lv = real_levels_q()
+    out = pd.DataFrame(index=lv.index)
+    for g, secs in (("MKT", OT_MKT), ("PUB", OT_PUB)):
+        out[g] = sum(chain_real(s[f"{c}_NOM"], s[f"{c}_YOY"]).reindex(lv.index) for c in secs)
+    out["TAX"] = lv["OTHER"] - out["MKT"] - out["PUB"]
+    return out
+
+
+def other_parts() -> dict:
+    """Weights of the parts in GVA_OTHER and quarterly equations: net taxes on household consumption and GFCF
+    (official real growth of taxes on products), market services on household consumption."""
+    from macromodel import quarterly as Q
+    lv = other_parts_levels()
+    y = lv.loc[f"{OT_YEAR}Q1":f"{OT_YEAR}Q4"].sum()
+    w = (y / y.sum()).to_dict()
+    s = pd.read_csv(EXT / "gdp_sections_q.csv", index_col="quarter")
+    q = Q.data()
+    q["GFCF"] = quarterly()["GDPE_GFCF_YOY"]
+    q["TAX"] = s["TAX_YOY"]
+    q["MKT"] = (lv["MKT"] / lv["MKT"].shift(4) * 100 - 100)
+    fits = {}
+    for k, regs in (("TAX", ["HH", "GFCF"]), ("MKT", ["HH"])):
+        smp = Q.sample(q, k, regs).loc[OT_FIRST:]
+        fits[k] = Q.ols_nw(smp[k], smp[regs]) | {"first": smp.index[0], "last": smp.index[-1], "regs": regs}
+    a = lv.groupby(lv.index.str[:4]).sum(min_count=4)
+    return {"w": w, "fits": fits, "growth": (a.pct_change() * 100), "share": (y / real_levels_q().loc[f"{OT_YEAR}Q1":f"{OT_YEAR}Q4", "GDP"].sum()).to_dict()}
+
+
+def other_coef_rows() -> list[dict]:
+    p = other_parts()
+    names = {"MKT": "рыночные услуги (E, I, K, L, M, N, R, S)", "PUB": "образование и здравоохранение (P, Q)",
+             "TAX": "чистые налоги на продукты"}
+    rows = [{"eq": "GVA_OT_W", "var": k, "coef": round(float(p["w"][k]), 2), "se": None, "period": OT_YEAR,
+             "method": "расчёт: доля в реальной ВДС прочих", "r2": None, "note": f"Вес части «{names[k]}» в прочих отраслях и налогах"}
+            for k in ("MKT", "PUB", "TAX")]
+    notes = {"TAX": "Чистые налоги на продукты (НДС, акцизы, пошлины) от конечных покупок: потребление домохозяйств и ВНОК. "
+                    "Импорт отдельно незначим (t 0,9): НДС берётся с покупки, местной или импортной",
+             "MKT": "Рыночные услуги от потребления домохозяйств"}
+    for k, r in p["fits"].items():
+        for v in ["const"] + r["regs"]:
+            rows.append({"eq": f"GVA_OT_{k}", "var": v, "coef": round(float(r["coef"][v]), 2), "se": round(float(r["se"][v]), 2),
+                         "period": f"{r['first'][:4]}–{r['last'][:4]}", "method": "МНК квартальные, Newey–West, без 2022Q1–2023Q1",
+                         "r2": round(r["r2"], 2), "note": notes[k] if v == "const" else ""})
+    for (g, v), (c, note) in OT_CALIBRATED.items():
+        rows.append({"eq": f"GVA_OT_{g}", "var": v, "coef": c, "se": None, "period": "", "method": "калибровка",
+                     "r2": None, "note": note})
+    return rows

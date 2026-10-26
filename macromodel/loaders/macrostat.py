@@ -335,3 +335,33 @@ def agro_export_prices_m(path: Path) -> pd.DataFrame:
             continue
         out[pd.Period(d, "M")] = {k: _num(_cell(r, j)) for k, j in cols.items()}
     return pd.DataFrame.from_dict(out, orient="index").sort_index()
+
+
+# GDP_Q sheet: GDP by production method, nominal UAH million and real % y/y, quarterly from 2002.
+# Sections B1 does not model separately (GVA_OTHER), plus taxes and subsidies on products.
+GDP_SECTIONS = {
+    "E": "Водопостачання", "I": "Тимчасове розміщування", "K": "Фінансова та страхова", "L": "Операції з нерухомим",
+    "M": "Професійна, наукова", "N": "Діяльність у сфері адміністративного", "P": "Освіта", "Q": "Охорона здоров",
+    "R": "Мистецтво, спорт", "S": "Надання інших видів послуг", "TAX": "Податки на продукти", "SUB": "Субсидії на продукти",
+}
+
+
+def gdp_sections_q(path: Path) -> pd.DataFrame:
+    """<code>_NOM (UAH million) and <code>_YOY (real % y/y) for GDP_SECTIONS, sheet GDP_Q.
+    The nominal block starts at the first '1. За виробничим методом' header, the real growth block at the second."""
+    rows = _rows(path, "GDP_Q")
+    h = rows[0]
+    starts = [j for j, v in enumerate(h) if isinstance(v, str) and v.strip().startswith("1. За виробничим")]
+    cols = {}
+    for kind, start in (("NOM", starts[0]), ("YOY", starts[1])):
+        for code, text in GDP_SECTIONS.items():
+            cols[f"{code}_{kind}"] = start + _col(h[start:], text)
+    out = {}
+    for r in rows[1:]:
+        y, q = _num(_cell(r, 0)), _cell(r, 1)
+        if y and isinstance(q, str) and q.strip()[:1].isdigit():
+            out[f"{int(y)}Q{q.strip()[0]}"] = {k: _num(_cell(r, j)) for k, j in cols.items()}
+    df = pd.DataFrame.from_dict(out, orient="index").sort_index()
+    yoy = [c for c in df.columns if c.endswith("_YOY")]
+    df[yoy] = df[yoy].where(df[yoy].abs() < 80)  # the sheet mixes % y/y and index (100 = no change) in early years
+    return df
