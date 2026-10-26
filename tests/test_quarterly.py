@@ -252,4 +252,17 @@ def test_other_split():
     assert abs(sum(w.values()) - 1) < 1e-9 and all(v > 0.1 for v in w.values())
     c = {(row["eq"], row["var"]): row["coef"] for row in other_coef_rows()}
     assert c[("GVA_OT_TAX", "HH")] > 0 and c[("GVA_OT_MKT", "HH")] > 0
-    assert len(p["COEFS!A204:L213"]) == 10
+    assert len(p["COEFS!A204:L216"]) == 13
+
+
+def test_pub_services():
+    from macromodel.blocks.real_sector import pub_prices
+    p = payload("b1_payload")
+    t = p["B1_REAL!A94:H104"]
+    r = {row[0]: 94 + i for i, row in enumerate(t) if row and row[0]}
+    assert p["B1_REAL!A85:H92"][4][5] == f"=F{r['PUB_REAL']}"  # row 89 takes real growth = fund over rates
+    assert t[r["PUB_RATE"] - 94][4].startswith("=MAX(")  # rates never below the CPI floor
+    assert "SCENARIOS!M194" in t[r["PUB_FUND"] - 94][5]
+    pp = pub_prices()
+    assert 0.5 < pp["coef"]["MINW"] < 1.2 and pp["r2"] > 0.5  # history: the deflator followed the minimum wage
+    assert "SCENARIOS!A191:O194" in p  # pay fund defaults, written only without --coefs

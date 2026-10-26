@@ -279,8 +279,9 @@ OT_FIRST = "2016Q1"
 OT_CALIBRATED = {
     ("MKT", "CAP"): (0.1, "Рыночные услуги от мощности энергосистемы: отключения света и разрушения. Оценка Claude: "
                           "треть эластичности переработки (0,3), у услуг больше генераторов и меньше энергоёмкость"),
-    ("PUB", "const"): (1.5, "Образование и здравоохранение: средний рост 2016–2025 без 2022. Связь с численностью "
-                            "работников и реальными бюджетными расходами в данных не найдена (незначима или обратный знак)"),
+    ("PUB", "MINW_W"): (0.3, "Образование и здравоохранение: доля ставок, привязанных к минимальной зарплате (младший персонал, "
+                             "доплаты до минимума). Остальное — решения о повышении (SCENARIOS, гражданские бюджетники). Оценка Claude"),
+    ("PUB", "CPI_FLOOR"): (0.5, "Образование и здравоохранение: ставки растут не меньше половины инфляции (правило Андрея, 26.10.2026)"),
 }
 
 
@@ -334,4 +335,37 @@ def other_coef_rows() -> list[dict]:
     for (g, v), (c, note) in OT_CALIBRATED.items():
         rows.append({"eq": f"GVA_OT_{g}", "var": v, "coef": c, "se": None, "period": "", "method": "калибровка",
                      "r2": None, "note": note})
+    pp = pub_prices()
+    for v in ("const", "MINW"):
+        rows.append({"eq": "GVA_OT_PUB_DEFL", "var": v, "coef": round(float(pp["coef"][v]), 2), "se": None,
+                     "period": pp["years"], "method": "МНК годовые, без 2017, 2022–2023", "r2": round(pp["r2"], 2),
+                     "note": "Дефлятор образования и здравоохранения по истории: ставки шли за минимальной зарплатой. "
+                             "Только для сверки: в прогнозе ставки задаются решениями о повышении" if v == "const" else ""})
     return rows
+
+
+PUB_YEARS = [str(y) for y in range(2014, 2026) if y not in (2017, 2022, 2023)]  # 2017 doubling of min wage, war years
+
+
+def pub_prices() -> dict:
+    """Education and health (P, Q): Ukrstat measures them by inputs, so government pay decisions go into the
+    deflator (pay rates), and real growth is the pay fund above the rates. History: annual nominal, real and
+    implicit deflator; fit deflator = a + b × minimum wage growth (CPI adds nothing: its sign comes out negative)."""
+    from macromodel.blocks.wages import annual
+    s = pd.read_csv(EXT / "gdp_sections_q.csv", index_col="quarter")
+    y = s.index.str[:4]
+    nom = s[["P_NOM", "Q_NOM"]].sum(axis=1, min_count=2).groupby(y).sum(min_count=4)
+    real = other_parts_levels()["PUB"]
+    real = real.groupby(real.index.str[:4]).sum(min_count=4)
+    h = pd.DataFrame({"NOM": nom.pct_change() * 100, "REAL": real.pct_change() * 100})
+    h["DEFL"] = ((1 + h.NOM / 100) / (1 + h.REAL / 100) - 1) * 100
+    a = annual()
+    h["MINW"], h["CPI"] = a["MINW"].reindex(h.index), a["CPI"].reindex(h.index)
+    smp = h.loc[[x for x in PUB_YEARS if x in h.index]].dropna()
+    X = np.column_stack([np.ones(len(smp)), smp.MINW])
+    b = np.linalg.lstsq(X, smp.DEFL.values, rcond=None)[0]
+    fit = X @ b
+    r2 = 1 - ((smp.DEFL - fit) ** 2).sum() / ((smp.DEFL - smp.DEFL.mean()) ** 2).sum()
+    return {"hist": h, "coef": dict(zip(["const", "MINW"], b)), "r2": float(r2), "n": len(smp), "years": f"{smp.index[0]}–{smp.index[-1]}",
+            "real_lo": float(h.REAL.drop(["2022"], errors="ignore").loc["2015":"2025"].min()),
+            "real_hi": float(h.REAL.drop(["2022"], errors="ignore").loc["2015":"2025"].max())}
