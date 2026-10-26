@@ -105,9 +105,9 @@ def test_wage_nowcast():
     assert 0.3 < L.residual_rho() < 0.8
 
 
-def payload(name):
+def payload(name, *args):
     env = {**os.environ, "PYTHONPATH": "."}
-    return json.loads(subprocess.run([sys.executable, f"sheet/{name}.py"], capture_output=True, text=True, check=True, env=env).stdout)
+    return json.loads(subprocess.run([sys.executable, f"sheet/{name}.py", *args], capture_output=True, text=True, check=True, env=env).stdout)
 
 
 def test_wage_logic_check():
@@ -266,3 +266,21 @@ def test_pub_services():
     pp = pub_prices()
     assert 0.5 < pp["coef"]["MINW"] < 1.2 and pp["r2"] > 0.5  # history: the deflator followed the minimum wage
     assert "SCENARIOS!A191:O194" in p  # pay fund defaults, written only without --coefs
+
+
+def test_b5_quarterly():
+    from macromodel.blocks import external as X
+    p = payload("b5_payload")
+    t = p["B5_EXTERNAL!A43:T83"]
+    r = {row[0]: 43 + i for i, row in enumerate(t) if row and row[0] and " " not in row[0]}
+    row = lambda k: t[r[k] - 43]
+    assert isinstance(row("FXQ_RULE")[9], float)  # facts stay numbers: no loop via ANCHORS row 12
+    assert "B4_LABOUR!G14:J14" in row("REMQ_G")[10]  # migration added back to last quarter's growth, does not compound
+    assert row("OTHERQ")[9] == "=COEFS!$E$57/4"  # 2026Q3 tranche, not other flows, closes the reserve change
+    assert row("RESQ")[10] == "=J72-K70+K71" and p["ANCHORS!BC24:BK24"][0][0] == "=B5_EXTERNAL!K72"
+    assert "B5_EXTERNAL!H80:K80" in payload("b6_payload")["B6_FISCAL!A1:H47"][42][4]  # euro revaluation of FX debt
+    fit = X.remit_fit()
+    assert 0.8 < fit["coef"]["REM_L"] < 1 and fit["r2"] > 0.7
+    assert "SCENARIOS!A196:O199" in p and "SCENARIOS!A196:O199" not in payload("b5_payload", "--coefs")
+    sq = payload("scenarios_q_payload")
+    assert "B5_EXTERNAL!J69" in sq["ANCHORS!BB29:BC29"][0][0] and "B5_EXTERNAL!J45" in sq["ANCHORS!BB12:BK12"][0][0]

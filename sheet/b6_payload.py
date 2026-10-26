@@ -26,6 +26,7 @@ h = a.loc["2025"]
 sched = pd.read_csv(HIST / "debt_schedule_y.csv", index_col=0)["external_repayment"]
 sched.index = sched.index.astype(str)
 Q4 = {"E": "BC", "F": "BG", "G": "BK"}  # ANCHORS columns of the fourth quarter
+B5Q = {"E": "H80:K80", "F": "L80:O80", "G": "P80:S80"}  # B5_EXTERNAL quarter columns of each year (row 80: euro revaluation of FX debt)
 pairs = list(zip("EFG", "DEF"))
 EFG = lambda f: [f(c, p) for c, p in pairs]
 r1 = lambda x: round(float(x), 1)
@@ -82,7 +83,8 @@ rows = [
     + [f"=IF(ANCHORS!{Q4[c]}13<>\"\";ANCHORS!{Q4[c]}13;ANCHORS!{Q4[c]}12)" for c in "EFG"]
     + ["ANCHORS: конец 4 кв.; где прогноза конца периода нет — средний курс 4 кв."],
     ["DEBT_FX_USD", "Валютный (внешний) госдолг", "млрд USD; прошлый год + внешние займы − погашение", r1(h["EXT_DEBT_USD"])]
-    + EFG(lambda c, p: f"={p}43+({c}32-{c}16)/{c}14") + ["2025 — внешний долг сектора госуправления (НБУ); в долларах курс не меняет"],
+    + EFG(lambda c, p: f"={p}43+({c}32-{c}16)/{c}14+SUM(B5_EXTERNAL!{B5Q[c]})")
+    + ["2025 — внешний долг сектора госуправления (НБУ); + переоценка евро к доллару (B5_EXTERNAL строка 80)"],
     ["DEBT_FX", "Валютный долг в гривне", "млрд USD × курс на конец года"] + [f"={c}43*{c}42" for c in "DEFG"]
     + ["здесь прогнозный курс: Минфин показывает долг по текущему курсу"],
     ["REVAL", "Переоценка валютного долга", "долг прошлого года × изменение курса, млрд грн", ""]

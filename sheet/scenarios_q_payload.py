@@ -63,7 +63,10 @@ out["B5_EXTERNAL!E17:G17"] = [[
 
 ov = lambda col, r: f"INDEX(SCENARIOS!$C${r}:$L${r};MATCH({col}$4;SCENARIOS!$C${HEAD}:$L${HEAD};0))"
 # quarterly financing received: given tranche, else the rest of the year over the empty quarters
-for start, (y, b5, actual) in {"BB": (2026, "E", "-SUM($AZ29:$BA29)"), "BD": (2027, "F", ""), "BH": (2028, "G", "")}.items():
+# 2026Q3: reserves are known, so the tranche is what closes the reserve change (B5 section 5); 2026Q4 = rest of the year
+out["ANCHORS!BB29:BC29"] = [[f"=IF({ov('BB', fa)}<>\"\";{ov('BB', fa)};B5_EXTERNAL!J69-(B5_EXTERNAL!I72-B5_EXTERNAL!J72+B5_EXTERNAL!J71))",
+                             f"=IF({ov('BC', fa)}<>\"\";{ov('BC', fa)};B5_EXTERNAL!$E$32-SUM($AZ29:$BB29))"]]
+for start, (y, b5, actual) in {"BD": (2027, "F", ""), "BH": (2028, "G", "")}.items():
     c0, c1 = YEAR_COLS[y]
     q = f"SCENARIOS!${c0}${fa}:${c1}${fa}"
     n = {2026: 2, 2027: 4, 2028: 4}[y]
@@ -73,8 +76,10 @@ for start, (y, b5, actual) in {"BB": (2026, "E", "-SUM($AZ29:$BA29)"), "BD": (20
 o = lambda r: ov("BB", r)
 out["ANCHORS!BB5"] = [[f"=IF({o(R['GDP'])}<>\"\";AX5*(1+{o(R['GDP'])}/100);BB6)"]]
 # CPI (ANCHORS row 10) is written by cpi_blocks_payload: NBU blocks in B3_PRICES section 4
-out["ANCHORS!BB12"] = [[f"=IF({o(R['FX'])}<>\"\";{o(R['FX'])};BA12)"]]
-out["ANCHORS!BD12"] = [[f"=IF({ov('BD', R['FX'])}<>\"\";{ov('BD', R['FX'])};AZ12*(1+INDEX(B3_PRICES!$E$11:$G$11;MATCH(BD$2;B3_PRICES!$E$10:$G$10;0))/100))"]]
+# FX: given quarter, else last quarter × (1 + quarterly depreciation rule of B5_EXTERNAL row 45); B5 columns J:S = BB:BK
+ACOLS = ["BA", "BB", "BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BK"]
+out["ANCHORS!BB12:BK12"] = [[f"=IF({ov(a, R['FX'])}<>\"\";{ov(a, R['FX'])};{p}12*(1+B5_EXTERNAL!{b}45/100))"
+                             for p, a, b in zip(ACOLS, ACOLS[1:], "JKLMNOPQRS")]]
 out["ANCHORS!BB14"] = [[f"=IF({o(R['RATE'])}<>\"\";{o(R['RATE'])};BA14)"]]
 out["ANCHORS!BD14"] = [[f"=IF({ov('BD', R['RATE'])}<>\"\";{ov('BD', R['RATE'])};BC14+(INDEX(B7_MONETARY!$E$20:$G$20;MATCH(BD$2;B7_MONETARY!$E$10:$G$10;0))-BC14)/(5-VALUE(RIGHT(BD$4;1))))"]]
 json.dump(out, sys.stdout, ensure_ascii=False)
