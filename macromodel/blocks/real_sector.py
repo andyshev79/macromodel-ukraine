@@ -369,3 +369,38 @@ def pub_prices() -> dict:
     return {"hist": h, "coef": dict(zip(["const", "MINW"], b)), "r2": float(r2), "n": len(smp), "years": f"{smp.index[0]}–{smp.index[-1]}",
             "real_lo": float(h.REAL.drop(["2022"], errors="ignore").loc["2015":"2025"].min()),
             "real_hi": float(h.REAL.drop(["2022"], errors="ignore").loc["2015":"2025"].max())}
+
+
+
+TRADE_YEARS = (2011, 2025)  # annual sample without 2022 (invasion: destruction, not wages)
+
+
+def trade_fit() -> dict:
+    """Trade (G) on real wage growth, asymmetric: a fall in real wages cuts trade about one to one (2014-2015),
+    a rise adds little (savings, debt repayment, purchases abroad). Annual Ukrstat 2011-2025 without 2022.
+    Tried and not significant next to the real wage: real imports (t 1.7, and imports depend on GDP, a loop),
+    devaluation (t -1.9, the same 2014-2015 years), remittances, credit, real deposit and loan rates, exports, CPI."""
+    import statsmodels.api as sm
+    a = pd.read_csv(HIST / "long" / "annual_y.csv", index_col=0).T.apply(pd.to_numeric, errors="coerce")
+    a.index = a.index.astype(int)
+    rw = ((1 + a["WAGE_NOM"].pct_change()) / (1 + a["CPI_AVG_YOY"] / 100) - 1) * 100
+    d = pd.DataFrame({"G": a["GVA_G_YOY"], "RW_NEG": rw.clip(upper=0), "RW_POS": rw.clip(lower=0)})
+    d = d.loc[TRADE_YEARS[0]:TRADE_YEARS[1]].drop(2022, errors="ignore").dropna()
+    m = sm.OLS(d["G"], sm.add_constant(d[["RW_NEG", "RW_POS"]])).fit()
+    calm = d.loc[2016:, "G"]
+    h = a["GVA_G_YOY"].loc[2016:2025].drop(2022, errors="ignore")
+    return {"coef": m.params.rename({"const": "const"}), "se": m.bse, "r2": float(m.rsquared), "n": int(m.nobs),
+            "first": str(d.index[0]), "last": str(d.index[-1]), "lo": float(h.min()), "hi": float(h.max()),
+            "rw_lo": float(rw.loc[2016:2025].drop(2022).min()), "rw_hi": float(rw.loc[2016:2025].drop(2022).max()),
+            "calm_mean": float(calm.mean())}
+
+
+def trade_coef_rows(r: dict | None = None) -> list[dict]:
+    r = r or trade_fit()
+    notes = {"const": "Торговля от реальной зарплаты, несимметрично: падение реальной зарплаты режет торговлю почти один к одному "
+                      "(2014–2015), рост добавляет мало (сбережения, долги, покупки за границей). Импорт, девальвация, переводы, "
+                      "кредит, ставки, экспорт рядом с зарплатой незначимы",
+             "RW_NEG": "при падении реальной зарплаты", "RW_POS": "при росте реальной зарплаты"}
+    return [{"eq": "GVA_G_RW", "var": v, "coef": round(float(r["coef"][v]), 2), "se": round(float(r["se"][v]), 2),
+             "period": f"{r['first']}–{r['last']}", "method": "МНК годовые, без 2022", "r2": round(r["r2"], 2), "note": notes[v]}
+            for v in ("const", "RW_NEG", "RW_POS")]

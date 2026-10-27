@@ -288,3 +288,14 @@ def test_b5_quarterly():
     assert "SCENARIOS!A196:O199" in p and "SCENARIOS!A196:O199" not in payload("b5_payload", "--coefs")
     sq = payload("scenarios_q_payload")
     assert "B5_EXTERNAL!J69" in sq["ANCHORS!BB29:BC29"][0][0] and "B5_EXTERNAL!J45" in sq["ANCHORS!BB12:BK12"][0][0]
+
+
+def test_trade_real_wage():
+    from macromodel.blocks.real_sector import trade_fit
+    r = trade_fit()
+    assert r["coef"]["RW_NEG"] > 0.5 and r["coef"]["RW_NEG"] / r["se"]["RW_NEG"] > 2  # falling real wages cut trade
+    assert 0 <= r["coef"]["RW_POS"] < r["coef"]["RW_NEG"]  # rising ones add little
+    p = payload("b1_payload")
+    g = p["B1_REAL!A17:G31"][7]
+    assert g[0] == "GVA_G" and "MIN(B4_LABOUR!F$74;0)" in g[5]  # trade is no longer a constant
+    assert "ВНИМАНИЕ" in p["B1_REAL!H24"][0][0]
