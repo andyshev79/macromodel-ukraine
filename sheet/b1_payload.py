@@ -9,7 +9,8 @@ from pathlib import Path
 import pandas as pd
 
 from macromodel.blocks.real_sector import (SECTORS, annual_growth, coef_table, manuf_coef_rows, manuf_data, other_coef_rows, pub_prices,
-                                          other_parts, other_parts_levels, real_levels_q)
+                                          other_parts, other_parts_levels, real_levels_q,
+                                          trade_coef_rows, trade_fit)
 from macromodel.blocks.demand import link_other_to_consumption
 from macromodel.blocks.shocks import SHOCK_ROW, SHOCKS, estimated
 
@@ -102,6 +103,16 @@ OT_ROW = {k: 93 + i for i, k in enumerate(OT_CODES)}
 PB_CODES = ["PUB_MINW", "PUB_CIV", "PUB_CPI", "PUB_RATE", "PUB_RATE_H", "PUB_FUND", "PUB_REAL", "PUB_CHK", "PUB_FLOOR"]
 PB_ROW = {k: 102 + i for i, k in enumerate(PB_CODES)}
 PUB_SC = 194  # SCENARIOS: education and health pay fund, active columns L:N
+# Trade follows real wages, asymmetric (annual fit, COEFS 226-228; 225 is the last B5 row)
+TR_FIRST = 226
+RW_B4 = 74  # B4_LABOUR RW_ECON: real wage growth without de-shadowing (not new income)
+trf = trade_fit()
+tr = trade_coef_rows(trf)
+TR = {(r["eq"], r["var"]): r["coef"] for r in tr}
+TR_ROW = {r["var"]: TR_FIRST + i for i, r in enumerate(tr)}
+out[f"COEFS!A{TR_FIRST}:L{TR_FIRST + len(tr) - 1}"] = [
+    [f"{r['eq']}_{r['var']}", "B1", r["eq"], r["var"], float(r["coef"]), float(r["se"]), round(float(r["coef"]) / float(r["se"]), 1),
+     r["period"], r["method"], float(r["r2"]), "2026-10-27", r["note"]] for r in tr]
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
     "B": (f"{kv('B','const')} + {kv('B','PORTS')} × рост портов + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
@@ -111,7 +122,10 @@ eq = {
     "D": ("рост мощности (эластичность 1)", lambda c, p: f"={C('D','const')}+{C('D','CAP')}*({c}$13/{p}$13-1)*100"),
     "F": ("снизу вверх: жильё, восстановление, фортификации (B9_CONSTRUCTION строка 26)",
           lambda c, p: f"=B9_CONSTRUCTION!{c}26"),
-    "G": ("константа (до связки с потреблением B2)", lambda c, p: f"={C('G','const')}"),
+    "G": (f"{num(TR[('GVA_G_RW', 'const')])} + {num(TR[('GVA_G_RW', 'RW_NEG')])} × падение реальной зарплаты + "
+          f"{num(TR[('GVA_G_RW', 'RW_POS')])} × рост реальной зарплаты (B4 строка {RW_B4}, без детенизации)",
+          lambda c, p: f"=COEFS!$E${TR_ROW['const']}+COEFS!$E${TR_ROW['RW_NEG']}*MIN(B4_LABOUR!{c}${RW_B4};0)"
+                       f"+COEFS!$E${TR_ROW['RW_POS']}*MAX(B4_LABOUR!{c}${RW_B4};0)"),
     "H": ("−0,55 + 0,22 × рост портов", lambda c, p: f"={C('H','const')}+{C('H','PORTS')}*({c}$12/{p}$12-1)*100"),
     "J": ("тренд 2024–2025", lambda c, p: f"={C('J','const')}"),
     "O": ("доля обороны × рост численности военных + доля госуправления × рост штата (раздел 5)",
@@ -136,6 +150,14 @@ sumif = lambda c, yr: f"SUMIF($H${S3 - 2}:$BK${S3 - 2};{yr};$H${GDP3}:$BK${GDP3}
 rows.append(["GDP_REAL_P", "ВВП по производству", "сумма отраслей"] +
             [f"={sumif(c, c + '$18')}/{sumif(c, c + '$18-1')}*100-100" for c in "DEFG"])
 out[f"B1_REAL!A17:G{GDP2}"] = rows
+# logic check for trade: out of the 2016-2025 corridor is OK only when the real wage is out of its own corridor
+r_g = S2 + CODES.index("G")
+tlo, thi, hlo, hhi = (str(round(trf[k], 1)).replace(".", ",") for k in ("lo", "hi", "rw_lo", "rw_hi"))
+out[f"B1_REAL!H{r_g}"] = [["=" + "&\" · \"&".join(
+    f"IF(AND({c}{r_g}>={tlo};{c}{r_g}<={thi});\"{y}: OK\";IF(OR(B4_LABOUR!{c}${RW_B4}<{hlo};B4_LABOUR!{c}${RW_B4}>{hhi});"
+    f"\"{y}: OK, вне коридора вслед за реальной зарплатой\";\"{y}: ВНИМАНИЕ, вне коридора истории\"))"
+    for c, y in zip("EFG", (2026, 2027, 2028))) +
+    f"&\" (история 2016–2025 без 2022: {num(trf['lo'])}…{num(trf['hi'])}%)\""]]
 
 hdr = [["3. Реальная ВДС по кварталам, млн грн в ценах 2021"],
        ["", "", "", "", "", "", "Год"] + [f"=ANCHORS!{QCOL[q]}2" for q in QUARTERS],
