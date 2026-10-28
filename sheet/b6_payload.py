@@ -95,13 +95,39 @@ rows = [
 ]
 out[f"B6_FISCAL!A1:H{len(rows)}"] = rows
 
+# 2026 by Treasury months: state budget balance, bn UAH (+ = deficit), from the cumulative
+# figures on index.minfin.com.ua (Treasury), 28.10.2026. Months without data stay blank.
+DEF_2026_M = [-17.927, 50.233, 98.034, 143.964, 133.710, -104.859, -115.890, 382.803]
+MONTHS = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+MC = [chr(68 + i) for i in range(12)]  # D..O
+M0 = len(rows) + 2  # section title row
+out[f"B6_FISCAL!A{M0}:P{M0 + 7}"] = [
+    ["5. Дефицит госбюджета 2026 по месяцам (Казначейство), млрд грн, + = дефицит"],
+    ["Код", "Показатель", "Единицы"] + MONTHS + ["Комментарий"],
+    ["DEF_M_FACT", "Дефицит месяца, факт", "млрд грн"] + DEF_2026_M + [""] * (12 - len(DEF_2026_M))
+    + ["index.minfin.com.ua (Казначейство), разница накопленных итогов; новый месяц — вписать в пустую ячейку"],
+    ["DEF_M_REST", "Остаток годового дефицита на месяц без данных", "млрд грн",
+     f"=IFERROR(($E$26-SUM($D${M0 + 2}:$O${M0 + 2}))/COUNTBLANK($D${M0 + 2}:$O${M0 + 2});0)"]
+    + [""] * 11 + ["годовой дефицит модели (E26) минус факт, поровну на оставшиеся месяцы"],
+    ["DEF_M", "Дефицит месяца: факт или остаток", "млрд грн"]
+    + [f"=IF({c}{M0 + 2}<>\"\";{c}{M0 + 2};$D${M0 + 3})" for c in MC] + ["идёт в ANCHORS: 3 кв. = июл–сен, 4 кв. = остаток года"],
+    ["DEF_M_2025Q4", "Средний дефицит месяца в 4 кв. 2025", "млрд грн", "=ANCHORS!$AY$27/3/1000"] + [""] * 11
+    + ["самый напряжённый квартал истории (декабрьские выплаты)"],
+    ["DEF_M_RATIO", "Остаток на месяц к 4 кв. 2025", "раз", f"=IFERROR(D{M0 + 3}/D{M0 + 5};0)"] + [""] * 11
+    + ["> 1,5 — годовой дефицит модели вряд ли выполним за оставшиеся месяцы (CHECKS)"],
+    [""],
+]
 look = lambda c, r: f"INDEX(B6_FISCAL!$E${r}:$G${r};MATCH({c}$2;B6_FISCAL!$E$10:$G$10;0))"
-# 2026 has two actual quarters: the rest of the annual deficit is split over Q3-Q4
-out["ANCHORS!BB27:BC27"] = [["=(B6_FISCAL!$E$26*1000-SUM($AZ27:$BA27))/2"] * 2]
+# 2026: Q3 = July-September by Treasury months (fact or rest of the year), Q4 = the rest of the annual deficit
+out["ANCHORS!BB27:BC27"] = [[f"=SUM(B6_FISCAL!$J${M0 + 4}:$L${M0 + 4})*1000", "=B6_FISCAL!$E$26*1000-SUM($AZ27:$BB27)"]]
 out["ANCHORS!BD27"] = [[f"={look('BD', 26)}*1000/4"]]
 out["ANCHORS!BB31"] = [[f"={look('BB', 40)}"]]
 out["CHECKS!A25:D26"] = [
     ["Разрыв финансирования бюджета", "Потребность − внешние займы − внутреннее, млн USD; не выше порога", 0,
      "=IFERROR(INDEX(B6_FISCAL!$D$35:$G$35;MATCH(D$4;B6_FISCAL!$D$10:$G$10;0));\"\")"],
     ["  статус", "", "", "=IF(D25=\"\";\"нет данных\";IF(D25<=$C$25;\"OK\";\"ВНИМАНИЕ\"))"]]
+out["CHECKS!A43:D44"] = [
+    ["Дефицит 2026: остаток года на месяц", "Сколько дефицита в месяц осталось на месяцы без данных Казначейства, "
+     "к среднему месяцу 4 кв. 2025 (B6_FISCAL раздел 5); не выше порога", 1.5, f"=B6_FISCAL!D{M0 + 6}"],
+    ["  статус", "", "", "=IF(D43=\"\";\"нет данных\";IF(D43<=$C$43;\"OK\";\"ВНИМАНИЕ\"))"]]
 json.dump(out, sys.stdout, ensure_ascii=False)
