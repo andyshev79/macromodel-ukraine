@@ -141,4 +141,6 @@ text += [
     [f"={cc}25*(1-{C('A_SIGMA')}/100)" for cc in "FG"] + ["для сравнения с 2022 (70 млн т) и 2024 (76 млн т)"],
 ]
 out["B10_AGRO!A1:I50"] = text
-json.dump(out, sys.stdout, ensure_ascii=False)
+from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
+
+json.dump(protect(out), sys.stdout, ensure_ascii=False)
