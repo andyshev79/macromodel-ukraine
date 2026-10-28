@@ -101,18 +101,29 @@ from macromodel.blocks.agro import ROW as AGRO_ROW, coef_rows as agro_coefs
 AGRO_SH = f"COEFS!$E${AGRO_ROW['A_AGRO_SH']}"
 AGRO_SH_TXT = f"{next(r['coef'] for r in agro_coefs() if r['code'] == 'A_AGRO_SH'):.2f}".replace(".", ",")
 kv = lambda c, v: f"{next(r['coef'] for r in coefs if (r['eq'], r['var']) == (f'GDPE_{c}', v)):.2f}".replace(".", ",").replace("-", "−")
+# Section 5: the peace effect by quarter. SCENARIOS rows 123-124 are the effect in quarters after the ceasefire
+# (row 16), not in the whole year: reconstruction and spending cannot start before it. A quarter that is the first
+# peaceful one against the same quarter a year ago also gets last year's effect (the level jump reaches it only now).
+SEC5 = 50
+CF, FLAG, PHH, PI = SEC5 + 2, SEC5 + 3, SEC5 + 4, SEC5 + 5
+peace_y = lambda c: f"SUMIF($H$30:$BK$30;{c}$19;$H${{r}}:$BK${{r}})/4"
+GFCF_MET_ROW = 232
+GFCF_MET = 0.03
 eqs = {
-    "HH": (f"{kv('HH', 'const')} + {kv('HH', 'REAL_WAGE')} × рост реальных трудовых доходов + влияние ставки (B7) + эффект мира",
-           lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14+B7_MONETARY!{c}39+SCENARIOS!{ACT_C[c]}{PEACE_ROW}"),
+    "HH": (f"{kv('HH', 'const')} + {kv('HH', 'REAL_WAGE')} × рост реальных трудовых доходов + влияние ставки (B7) + эффект мира "
+           "(только кварталы после прекращения огня, раздел 5)",
+           lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14+B7_MONETARY!{c}39+" + peace_y(c).format(r=PHH)),
     "GOV": (f"{pnum('GDPE_GOV', 'O_SH')} × раздел O из B1 (численность военных и штат) + остальное × "
             f"({kv('GOV', 'const')} + {kv('GOV', 'REAL_DEF')} × рост реальных расходов на оборону)",
             lambda c, p: f"={P('GDPE_GOV','O_SH')}*B1_REAL!{c}$74+(1-{P('GDPE_GOV','O_SH')})*"
                          f"({C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15)"),
-    "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7) + восстановление",
-             lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40+SCENARIOS!{ACT_C[c]}{PEACE_ROW + 1}"),
+    "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7) + 0,03 × изменение загрузки металлургии "
+             "(капвложения металлургов и руды) + восстановление (только кварталы после прекращения огня, раздел 5)",
+             lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40"
+                          f"+COEFS!$E${GFCF_MET_ROW}*(B1_REAL!{c}$16-B1_REAL!{p}$16)+" + peace_y(c).format(r=PI)),
     "EXP": (f"агро ({AGRO_SH_TXT}) × реальный агроэкспорт B10 + остальное × (−3,1 + 0,28 × рост портов + "
             + f"{estimated()['MET_X'][0]:.2f}".replace(".", ",") + " × изменение загрузки металлургии)",
-            lambda c, p: f"={AGRO_SH}*B10_AGRO!{c}41+(1-{AGRO_SH})*({C('EXP','const')}+{C('EXP','PORTS')}*({c}$12/{p}$12-1)*100"
+            lambda c, p: f"={AGRO_SH}*B10_AGRO!{c}41+(1-{AGRO_SH})*({C('EXP','const')}+{C('EXP','PORTS')}*LN({c}$12/{p}$12)*100"
                          f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16))"),
     "IMP": (f"оборонный ({pnum('GDPE_IMP', 'DEF_SH')}) × рост реальных расходов на оборону + гражданский × "
             f"({kv('IMP', 'const')} + {kv('IMP', 'DOM_DEMAND')} × рост внутреннего спроса)",
@@ -144,17 +155,64 @@ hdr.append(["GDP_REAL_E", "ВВП по расходам", "", "", "", "", "", "=
 out["B2_DEMAND!A29:H38"] = hdr
 quarters = [f"{y}Q{q}" for y in range(2015, 2027) for q in range(1, 5)][:46]
 out["B2_DEMAND!H32:BA37"] = [[round(float(lv.loc[q, c]), 1) for q in quarters] for c in codes]
-out["B2_DEMAND!BB32"] = [["=AX32*(1+INDEX($E20:$G20;MATCH(BB$30;$E$19:$G$19;0))/100)"]]
-# inventories: grain that the ports cannot ship stays in stocks (B10_AGRO row 42), shipped stocks leave them
-yr = lambda r, cols="$E${r}:$G${r}": f"INDEX({cols.format(r=r)};MATCH(BB$30;$E$19:$G$19;0))"
-out["B2_DEMAND!BB37"] = [[f"=AX37*(1+{yr(25)}/100)+{AGRO_SH}*INDEX(B10_AGRO!$E$42:$G$42;MATCH(BB$30;B10_AGRO!$E$10:$G$10;0))"
-                          f"/100*AX35"]]
+# forecast quarters BB..BK: the same quarter a year ago times the year's growth of the component
+FC = [col(i) for i in range(LAST_COL, LAST_COL + 10)]  # col(53) = BB
+growth = lambda q, r: f"INDEX($E${r}:$G${r};MATCH({q}$30;$E$19:$G$19;0))"
+
+
+def qcell(code, r, q):
+    p4, p8 = col(_ci(q) - 4), col(_ci(q) - 8)
+    g = growth(q, r)
+    if code in ("HH", "GFCF"):  # the year's average peace effect out, this quarter's effect in
+        pr = PHH if code == "HH" else PI
+        g = f"({g}-SUMIF($H$30:$BK$30;{q}$30;$H${pr}:$BK${pr})/4+{q}{pr})"
+    if code != "INV":
+        return f"={p4}{r + 12}*(1+{g}/100)"
+    # inventories are a flow: grain the ports cannot ship adds to them this year (B10_AGRO row 42, change of the
+    # carry-over stock), last year's addition is taken out so it does not pile up year after year
+    stock = lambda y, x: f"N(INDEX(B10_AGRO!$D$42:$G$42;MATCH({y};B10_AGRO!$D$10:$G$10;0)))/100*{x}35"
+    return (f"={p4}37*(1+{g}/100)+{AGRO_SH}*({stock(q + '$30', p4)}-{stock(q + '$30-1', p8)})")
+
+
+def _ci(c):
+    n = 0
+    for ch in c:
+        n = n * 26 + ord(ch) - 64
+    return n - 1
+
+
+out["B2_DEMAND!BB32:BK37"] = [[qcell(c, 20 + k, q) for q in FC] for k, c in enumerate(codes)]
 
 con = [["4. Вклад компонентов в рост ВВП, п.п. г/г"], ["Код", "Компонент", "", "", "", "", "", "=H31"]]
 for c in codes:
     con.append([f"GDPE_{c}", names[c] + (" (со знаком минус)" if c == "IMP" else "")])
 con.append(["GDP_REAL_E", "Рост ВВП по расходам, % г/г"])
 out["B2_DEMAND!A40:H48"] = con
+cf = "IFERROR(INDEX(SCENARIOS!$L$16:$N$16;MATCH(\"2*\";SCENARIOS!$L$16:$N$16;0));\"нет\")"
+eff = lambda q, srow: (f"=IF({q}$30<2026;0;{q}{FLAG}*INDEX(SCENARIOS!$L${srow}:$N${srow};{q}$30-2025)"
+                       f"+IF({q}$30>2026;INDEX(SCENARIOS!$L${srow}:$N${srow};{q}$30-2026)*({q}{FLAG}-{col(_ci(q) - 4)}{FLAG});0))")
+out[f"B2_DEMAND!A{SEC5}:H{PI}"] = [
+    ["5. Эффект мира по кварталам"],
+    ["Код", "Показатель", "", "", "", "", "", "=H31"],
+    ["CEASEFIRE", "Квартал прекращения огня (SCENARIOS строка 16, активный сценарий)", "=" + cf],
+    ["PEACE_Q", "Квартал после прекращения огня", "1 — мир, 0 — война"],
+    ["PEACE_HH", "Эффект мира в потреблении", "п.п. к росту г/г: значение года (SCENARIOS строка 123) после прекращения огня; "
+     "первый мирный квартал к военному год назад получает и прошлогодний"],
+    ["PEACE_I", "Эффект восстановления в ВНОК", "п.п. к росту г/г: то же по SCENARIOS строка 124"],
+]
+allq = [col(i) for i in range(7, LAST_COL + 10)]  # H..BK
+out[f"B2_DEMAND!H{SEC5 + 1}:BK{PI}"] = [
+    [f"={q}$31" for q in allq],
+    [""] * len(allq),
+    [f"=IF($C${CF}=\"нет\";0;IF({q}$31>=$C${CF};1;0))" for q in allq],
+    ["" if _ci(q) < LAST_COL else eff(q, PEACE_ROW) for q in allq],
+    ["" if _ci(q) < LAST_COL else eff(q, PEACE_ROW + 1) for q in allq],
+]
+out[f"COEFS!A{GFCF_MET_ROW}:L{GFCF_MET_ROW}"] = [[
+    "GDPE_GFCF_MET", "B2", "GDPE_GFCF", "MET", GFCF_MET, "", "", "2024–2025", "оценка", "", "2026-10-28",
+    "ВНОК на 1 п.п. изменения загрузки металлургии (B1_REAL строка 16): капвложения металлургов и железорудных "
+    "комбинатов ≈ 0,7 млрд USD из ~30 млрд USD ВНОК 2024–2025 (Метинвест, АрселорМиттал Кривой Рог, Ferrexpo). "
+    "Остановленные заводы не инвестируют. Оценка Claude"]]
 out["B2_DEMAND!L42"] = [["=IFERROR((L32-H32)/H$38*100;\"\")"]]
 out["B2_DEMAND!L46"] = [["=IFERROR(-(L36-H36)/H$38*100;\"\")"]]
 link = link_other_to_consumption()
