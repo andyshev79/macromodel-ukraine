@@ -172,7 +172,8 @@ def test_peace_gov_imports():
     assert rows["GDPE_EXP"][5].startswith("=COEFS!$E$196*B10_AGRO!F41+")  # agro part of exports follows B10  # defence imports follow real defence spending
     c = {r[0]: r[4] for r in p["COEFS!A168:L170"]}
     assert 0.4 < c["GDPE_GOV_O_SH"] < 0.7 and 0.05 < c["GDPE_IMP_DEF_SH"] < 0.25
-    assert "B10_AGRO!$E$42:$G$42" in p["B2_DEMAND!BB37"][0][0]  # unshipped grain goes to stocks
+    inv = p["B2_DEMAND!BB32:BK37"][5][0]
+    assert "B10_AGRO!$D$42:$G$42" in inv and "BB$30-1" in inv and "*AT35" in inv  # unshipped grain goes to stocks, last year's out
     assert 0.4 < p["COEFS!A168:L170"][2][4] < 0.8
 
 
@@ -299,3 +300,21 @@ def test_trade_real_wage():
     g = p["B1_REAL!A17:G31"][7]
     assert g[0] == "GVA_G" and "MIN(B4_LABOUR!F$74;0)" in g[5]  # trade is no longer a constant
     assert "ВНИМАНИЕ" in p["B1_REAL!H24"][0][0]
+
+
+def test_peace_by_quarter():
+    """Peace effect only after the ceasefire quarter; the year average feeds the annual equations."""
+    p = payload("b2_payload")
+    rows = {r[0]: r for r in p["B2_DEMAND!A18:G27"] if r and r[0]}
+    assert "$H$54:$BK$54)/4" in rows["GDPE_HH"][5] and "SCENARIOS!" not in rows["GDPE_HH"][5]
+    assert "$H$55:$BK$55)/4" in rows["GDPE_GFCF"][5] and "COEFS!$E$232*(B1_REAL!F$16-B1_REAL!E$16)" in rows["GDPE_GFCF"][5]
+    assert "LN(F$12/E$12)" in rows["GDPE_EXP"][5]  # closing and reopening the ports is symmetric
+    q = p["B2_DEMAND!H51:BK55"]
+    assert len(q[0]) == 56 and q[0][0] == "=H$31" and q[0][-1] == "=BK$31"
+    assert q[2][0] == '=IF($C$52="нет";0;IF(H$31>=$C$52;1;0))'
+    assert q[3][45] == "" and "SCENARIOS!$L$123:$N$123" in q[3][46] and "(BB53-AX53)" in q[3][46]
+    hh = p["B2_DEMAND!BB32:BK37"][0][0]
+    assert "-SUMIF($H$30:$BK$30;BB$30;$H$54:$BK$54)/4+BB54" in hh
+    b1 = payload("b1_payload")
+    assert any("B2_DEMAND!$H$55:$BK$55" in str(v) for v in b1.values())
+    assert not any("SCENARIOS!L124" in str(v) or "SCENARIOS!M124" in str(v) for v in b1.values())

@@ -116,7 +116,7 @@ out[f"COEFS!A{TR_FIRST}:L{TR_FIRST + len(tr) - 1}"] = [
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
     "B": (f"{kv('B','const')} + {kv('B','PORTS')} × рост портов + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
-          lambda c, p: f"={C('B','const')}+{C('B','PORTS')}*({c}$12/{p}$12-1)*100+{C('B','CAP')}*({c}$13/{p}$13-1)*100{MET('B', c, p)}"),
+          lambda c, p: f"={C('B','const')}+{C('B','PORTS')}*LN({c}$12/{p}$12)*100+{C('B','CAP')}*({c}$13/{p}$13-1)*100{MET('B', c, p)}"),
     "C": ("снизу вверх: 4 блока (металлургия, пищепром, машиностроение с ОПК, другое), раздел 6",
           lambda c, p: f"={c}{CB_ROW['GVA_C_BU']}"),
     "D": ("рост мощности (эластичность 1)", lambda c, p: f"={C('D','const')}+{C('D','CAP')}*({c}$13/{p}$13-1)*100"),
@@ -126,7 +126,7 @@ eq = {
           f"{num(TR[('GVA_G_RW', 'RW_POS')])} × рост реальной зарплаты (B4 строка {RW_B4}, без детенизации)",
           lambda c, p: f"=COEFS!$E${TR_ROW['const']}+COEFS!$E${TR_ROW['RW_NEG']}*MIN(B4_LABOUR!{c}${RW_B4};0)"
                        f"+COEFS!$E${TR_ROW['RW_POS']}*MAX(B4_LABOUR!{c}${RW_B4};0)"),
-    "H": ("−0,55 + 0,22 × рост портов", lambda c, p: f"={C('H','const')}+{C('H','PORTS')}*({c}$12/{p}$12-1)*100"),
+    "H": ("−0,55 + 0,22 × рост портов", lambda c, p: f"={C('H','const')}+{C('H','PORTS')}*LN({c}$12/{p}$12)*100"),
     "J": ("тренд 2024–2025", lambda c, p: f"={C('J','const')}"),
     "O": ("доля обороны × рост численности военных + доля госуправления × рост штата (раздел 5)",
           lambda c, p: f"={c}{O_ROW['GVA_O']}"),
@@ -259,7 +259,8 @@ mv = lambda eq, v: num(next(r["coef"] for r in mc if (r["eq"], r["var"]) == (eq,
 md = manuf_data().loc["2025Q1":"2025Q4"]
 h25 = lambda k: round(float(md[k].mean()), 1)
 R = CB_ROW
-gfcf_x = lambda c: f"(COEFS!$E$27+B7_MONETARY!{c}40+SCENARIOS!{ACT[c]}124)"
+# the peace effect of SCENARIOS row 124 by quarter, averaged over the year (B2_DEMAND section 5)
+gfcf_x = lambda c: f"(COEFS!$E$27+B7_MONETARY!{c}40+SUMIF(B2_DEMAND!$H$30:$BK$30;{c}$18;B2_DEMAND!$H$55:$BK$55)/4)"
 cb = [["6. Переработка по блокам: снизу вверх, сверка с уравнением сверху"],
       ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
       ["C_MET", "Металлургия: выпуск", "изменение загрузки мощностей (строка 16), % г/г", h25("MET")] +
