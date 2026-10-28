@@ -45,6 +45,17 @@ dq = X.dollar_q()
 rem_y = dq["REM_TOT"].groupby(dq.index.str[:4]).sum(min_count=4)
 other_2025 = float(a["RES"] - annual().loc["2024", "RES"] - (a["TRADE_BAL"] + rem_y["2025"] + a["FDI_L_USD"] + a["FIN_RECEIVED_USD"]))
 pairs = list(zip("EFG", "DEF"))
+# rolled steel that the stopped mills no longer supply comes in as imports (Andrey, 28.10.2026): domestic supply of
+# rolled steel × the idle share of metallurgy by quarter (B1_REAL row 117) × import price
+STEEL_FIRST = 229
+out[f"COEFS!A{STEEL_FIRST}:L{STEEL_FIRST + 1}"] = [
+    ["STEEL_IMP_DOM", "B5", "STEEL_IMP", "DOM", 2040, "", "", "2025", "оценка", "", "2026-10-28",
+     "Свой прокат на внутреннем рынке, тыс. т в год: потребление 3,4 млн т × (1 − 40,1% импорта), GMK Center / Метинвест-СМЦ 2025; "
+     "около трети — арматура и сортовой прокат для стройки"],
+    ["STEEL_IMP_PRICE", "B5", "STEEL_IMP", "PRICE", 650, "", "", "2025–2026", "оценка", "", "2026-10-28",
+     "Цена импортного проката, USD/т (арматура ~600, лист ~700). Оценка Claude"],
+]
+STEEL_Q = {"E": "AZ117:BC117", "F": "BD117:BG117", "G": "BH117:BK117"}  # B1_REAL section 8, MET_Q by year
 EFG = lambda f: [f(c, p) for c, p in pairs]
 rows = [
     ["5. Внешний сектор"],
@@ -67,7 +78,9 @@ rows = [
     ["FIN", "Внешнее финансирование бюджета", "млн USD", round(float(a["FIN_RECEIVED_USD"]))] + [f"=SCENARIOS!{s}20" for s in "LMN"] + ["SCENARIOS (обещано)"],
     ["HICP", "Инфляция еврозоны", "%"] + [f"=B3_PRICES!{c}15" for c in "DEFG"] + ["B3_PRICES"],
     ["CPI", "ИПЦ Украины", "%"] + [f"=B3_PRICES!{c}20" for c in "DEFG"] + ["B3_PRICES"],
-    [""],
+    ["STEEL_IMP", "Доп. импорт проката вместо своего (металлурги стоят)", "млн USD", 0]
+    + [f"=COEFS!$E${STEEL_FIRST}*COEFS!$E${STEEL_FIRST + 1}/1000*SUMPRODUCT(1-B1_REAL!{STEEL_Q[c]}/100)/4" for c in "EFG"]
+    + ["свой прокат × простой металлургии по кварталам (B1_REAL строка 117) × цена; входит в импорт"],
     ["2. Торговля и платёжный баланс, млн USD"],
     ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
     ["EXP_P", "Рост цен экспорта в USD", f"{k('EXP_P','const')} + {k('EXP_P','PX')} × рост цен сырья", round(float(a["EXP_P"]), 1)]
@@ -76,8 +89,8 @@ rows = [
     + EFG(lambda c, p: f"={p}24*(1+{c}11/100)*(1+{c}23/100)"),
     ["IMP_P", "Рост цен импорта в USD", f"{k('IMP_P','const')} + {k('IMP_P','TTF')} × рост цены газа", round(float(a["IMP_P"]), 1)]
     + EFG(lambda c, p: f"={C('IMP_P','const')}+{C('IMP_P','TTF')}*{c}16") + ["%, R² 0,58"],
-    ["IMP_USD", "Импорт товаров и услуг", "прошлый год × реальный рост × рост цен", round(float(a["IMP_USD"]))]
-    + EFG(lambda c, p: f"={p}26*(1+{c}12/100)*(1+{c}25/100)"),
+    ["IMP_USD", "Импорт товаров и услуг", "(прошлый год − прокат) × реальный рост × рост цен + прокат", round(float(a["IMP_USD"]))]
+    + EFG(lambda c, p: f"=({p}26-{p}20)*(1+{c}12/100)*(1+{c}25/100)+{c}20"),
     ["TRADE_BAL", "Сальдо торговли", "экспорт − импорт"] + [f"={c}24-{c}26" for c in "DEFG"],
     ["REMIT", "Частные переводы (оплата труда + трансферты)", "сумма кварталов (раздел 5)", round(float(rem_y["2025"]))]
     + [f"=SUM({q4(c, 'REMQ')})" for c in "EFG"] + ["лист Dollar (НБУ); до 2026-10-26 здесь были только трансферты"],
