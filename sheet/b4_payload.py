@@ -157,8 +157,8 @@ line("DU_O", "Изменение безработицы", f"{qk('UQ', 'const')} 
 line("SEAS_U", "Сезонность безработицы", "COEFS SEAS_U, п.п.", lambda c: f"={SEAS('U', c)}", "зимой выше")
 line("UNEMP", "Уровень безработицы", "тот же квартал прошлого года + изменение, не ниже 6% + сезонность",
      lambda c: f"={num(U25, 1)}+{c}{r['SEAS_U']}" if year(c) == "2025" else
-     f"=MAX({C('U', 'MIN')}+{c}{r['SEAS_U']};{prev(c, 4)}{len(rows) + 1}+{c}{r['DU_O']})",
-     "%; 2025 — оценка НБУ 11,5 + сезонность; нижняя граница COEFS!E51")
+     f"=MAX({C('U', 'MIN')}+{c}{r['SEAS_U']};{prev(c, 4)}{len(rows) + 1}+{c}{r['DU_O']})+{c}§LU§-{prev(c, 4)}§LU§",
+     "%; 2025 — оценка НБУ 11,5 + сезонность; нижняя граница COEFS!E51; + изменение г/г от увольнений с простоя (раздел 6)")
 line("EMPL", "Занятые", "рабочая сила × (1 − безработица)", lambda c: f"={c}{r['LF']}*(1-{c}{r['UNEMP']}/100)", "тыс. человек")
 line("EMPL_G", "Рост занятости", "% г/г", lambda c: f"=({c}{r['EMPL']}/{prev(c, 4)}{r['EMPL']}-1)*100", "", nf)
 line("PROD", "Рост производительности труда", "ВВП / занятые, % г/г",
@@ -216,9 +216,10 @@ line("DEC_P", "Декабрьская премия", "декабрь к трен
      f"премии, «13-я зарплата», помощь; {DEC['last_year']} — факт; дальше SCENARIOS. История: COEFS DEC_",
      [c for c in COLS[3:] if qn(c) == "4"])
 dec_adj = lambda c: f"*(1+{c}{r['DEC_P']}/300)/(1+{prev(c, 4)}{r['DEC_P']}/300)" if qn(c) == "4" else ""
-line("WAGE", "Средняя номинальная зарплата", "факт; дальше тот же квартал прошлого года × (1 + рост); 4 кв. × смена премии / 3",
+line("WAGE", "Средняя номинальная зарплата", "факт; дальше тот же квартал прошлого года × (1 + рост); 4 кв. × смена премии / 3; "
+     "× изменение потерь от простоя (раздел 6)",
      lambda c: f"=ANCHORS!{ANCH[COLS.index(c)]}20" if COLS.index(c) < FACT else round(NOW["value"], 1) if c == NOW_C else
-     f"={prev(c, 4)}{len(rows) + 1}*(1+({c}{r['NW_F']}+{c}{r['ADJ']})/100){dec_adj(c)}",
+     f"={prev(c, 4)}{len(rows) + 1}*(1+({c}{r['NW_F']}+{c}{r['ADJ']})/100){dec_adj(c)}*(1-{c}§WL§/100)/(1-{prev(c, 4)}§WL§/100)",
      "грн в месяц; идёт в ANCHORS, строка 20. Декабрь — треть 4 кв., поэтому премия двигает квартал на треть"
      + (f". {NOW['q']}: факт {', '.join(NOW['fact_months'])}; "
         + ", ".join(f"{m} = прошлый месяц × (1 + {num(v, 2)}%), медиана этого месяца" for m, v in NOW["filled"].items())
@@ -305,6 +306,44 @@ line("WHY", "Главная причина", "самая большая стро
                 f'=IF({c}{r["QQ_CHK"]}="OK";"";INDEX($B${d0}:$B${d1};MATCH(MAX(ARRAYFORMULA(ABS({c}{d0}:{c}{d1})));'
                 f'ARRAYFORMULA(ABS({c}{d0}:{c}{d1}));0)))'),
      "Если причина — допущение сценария, это сознательный выбор; если база или поправка — артефакт расчёта", QQ_C)
+# Section 6: idle pay and layoffs (2026-10-28, Andrey: mills stopped until the end of the war, Odesa ports almost
+# closed). Idle workers keep 2/3 of pay (Labour Code art. 113); after two idle quarters part of them is laid off.
+IDLE_FIRST = 235
+IDLE = [("MET_EMP", 160, "тыс. человек", "Металлургия и железорудные ГОКи 2025: металлургия ~100 тыс. (Метинвест, АрселорМиттал "
+         "Кривой Рог, остальные), ГОКи ~60 тыс. Оценка Claude"),
+        ("PORT_EMP", 30, "тыс. человек", "Портовые операторы и стивидоры Большой Одессы. Оценка Claude"),
+        ("PAY", 0.667, "доля", "Оплата простоя не ниже 2/3 оклада (КЗпП ст. 113)"),
+        ("WRATIO", 1.2, "раз", "Зарплата в металлургии и портах к средней по стране (Госстат 2025). Оценка Claude"),
+        ("WAGE_EMP", 5500, "тыс. человек", "Штатные работники в статистике средней зарплаты (Госстат, юрлица). Оценка Claude"),
+        ("LAYOFF", 0.3, "доля", "Часть простаивающих, уволенных после двух кварталов простоя; возвращаются, когда загрузка растёт. "
+         "Оценка Claude")]
+IROW = {k: IDLE_FIRST + i for i, (k, *_) in enumerate(IDLE)}
+IC = lambda k: f"COEFS!$E${IROW[k]}"
+out[f"COEFS!A{IDLE_FIRST}:L{IDLE_FIRST + len(IDLE) - 1}"] = [
+    [f"IDLE_{k}", "B4", "IDLE", k, v, "", "", "2025", "оценка", "", "2026-10-28", f"{note} ({unit})"] for k, v, unit, note in IDLE]
+B1C = lambda c: col(idx("AV") + COLS.index(c))  # B1_REAL quarter columns: AV = 2025Q1
+add("")
+add("6. Простой и увольнения: металлургия, руда, порты")
+add(*H)
+line("IDLE_MET", "Простой металлургии и ГОКов", "1 − загрузка (B1_REAL строка 117) / 100",
+     lambda c: f"=MAX(0;1-B1_REAL!{B1C(c)}117/100)", "доля мощностей")
+line("IDLE_PORT", "Простой портов", "1 − порты квартала / 2025 (B1_REAL строка 116)",
+     lambda c: f"=MAX(0;1-B1_REAL!{B1C(c)}116/AVERAGE(B1_REAL!$AV$116:$AY$116))", "доля")
+line("IDLE_N", "Простаивают", "занятые × простой", lambda c: f"={IC('MET_EMP')}*{c}{r['IDLE_MET']}+{IC('PORT_EMP')}*{c}{r['IDLE_PORT']}",
+     "тыс. человек; COEFS IDLE_MET_EMP, IDLE_PORT_EMP")
+line("LAYOFF_N", "Уволены после простоя", "доля × меньшее из простаивающих двух прошлых кварталов",
+     lambda c: 0 if COLS.index(c) < 2 else f"={IC('LAYOFF')}*MIN({prev(c)}{r['IDLE_N']};{prev(c, 2)}{r['IDLE_N']})",
+     "тыс. человек; COEFS IDLE_LAYOFF")
+line("IDLE_PAID", "Получают оплату простоя", "простаивают − уволены", lambda c: f"=MAX(0;{c}{r['IDLE_N']}-{c}{r['LAYOFF_N']})", "тыс. человек")
+line("WAGE_LOSS", "Потери средней зарплаты от простоя", "получают × (1 − 2/3) × зарплата отрасли к средней / работники в статистике",
+     lambda c: f"={c}{r['IDLE_PAID']}*(1-{IC('PAY')})*{IC('WRATIO')}/{IC('WAGE_EMP')}*100",
+     "% средней зарплаты; изменение г/г идёт в строку WAGE")
+line("LAYOFF_U", "Безработица от увольнений", "уволены / рабочая сила",
+     lambda c: f"={c}{r['LAYOFF_N']}/{c}{r['LF']}*100", "п.п.; изменение г/г идёт в строку UNEMP")
+for row in rows:  # fill the forward references of UNEMP and WAGE
+    for j, v in enumerate(row):
+        if isinstance(v, str) and "§" in v:
+            row[j] = v.replace("§LU§", str(r["LAYOFF_U"])).replace("§WL§", str(r["WAGE_LOSS"]))
 ROWS = r
 out[f"B4_LABOUR!A1:T{len(rows)}"] = rows
 YC = {"2026": "O", "2027": "P", "2028": "Q"}  # CHECKS year columns
