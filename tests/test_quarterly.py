@@ -276,13 +276,13 @@ def test_pub_services():
 def test_b5_quarterly():
     from macromodel.blocks import external as X
     p = payload("b5_payload")
-    t = p["B5_EXTERNAL!A43:T83"]
+    t = p["B5_EXTERNAL!A43:T95"]
     r = {row[0]: 43 + i for i, row in enumerate(t) if row and row[0] and " " not in row[0]}
     row = lambda k: t[r[k] - 43]
     assert isinstance(row("FXQ_RULE")[9], float)  # facts stay numbers: no loop via ANCHORS row 12
     assert "B4_LABOUR!G14:J14" in row("REMQ_G")[10]  # migration added back to last quarter's growth, does not compound
     assert row("OTHERQ")[9] == "=COEFS!$E$57/4"  # 2026Q3 tranche, not other flows, closes the reserve change
-    assert row("RESQ")[10] == "=J72-K70+K71" and p["ANCHORS!BC24:BK24"][0][0] == "=B5_EXTERNAL!K72"
+    assert row("RES_PRE")[10] == "=J72-K70+K71" and p["ANCHORS!BC24:BK24"][0][0] == "=B5_EXTERNAL!K72"
     assert "B5_EXTERNAL!H80:K80" in payload("b6_payload")["B6_FISCAL!A1:H47"][42][4]  # euro revaluation of FX debt
     fit = X.remit_fit()
     assert 0.8 < fit["coef"]["REM_L"] < 1 and fit["r2"] > 0.7
@@ -318,3 +318,20 @@ def test_peace_by_quarter():
     b1 = payload("b1_payload")
     assert any("B2_DEMAND!$H$55:$BK$55" in str(v) for v in b1.values())
     assert not any("SCENARIOS!L124" in str(v) or "SCENARIOS!M124" in str(v) for v in b1.values())
+
+
+def test_bop_closure():
+    """Reserves stay at the floor: extra financing first, then a forced import cut that devalues next year."""
+    p = payload("b5_payload")
+    sec = p["B5_EXTERNAL!A43:T95"]
+    row = {r[0]: r for r in sec if r and r[0]}
+    assert row["RESQ"][10] == "=K87+K91+K92" and row["RESQ"][9] == "=ANCHORS!BB24"
+    assert row["RES_FLOOR"][10] == "=COEFS!$E$233*SUM(H57:K57)/12"
+    assert row["EXTRA_FIN"][10] == "=MIN(K89;K90)" and row["EXTRA_AV"][10] == "=SCENARIOS!E297"
+    assert row["IMP_CUT"][18] == "=S89-S91"
+    assert "COEFS!$E$234*E$37" in row["FXQ_RULE"][11] and "COEFS!$E$234*F$37" in row["FXQ_RULE"][15]
+    assert p["ANCHORS!BB22:BK22"][0][1] == "=B5_EXTERNAL!K57-B5_EXTERNAL!K92"
+    sc = p["SCENARIOS!A293:O297"]
+    assert sc[4][3] == "=CHOOSE(MATCH($C$3;$A$8:$A$10;0);D294;D295;D296)" and sc[2][3] == 0
+    assert [r[4] for r in p["COEFS!A233:L234"]] == [3, 2]
+    assert p["CHECKS!A40:Q41"][0][14] == "=B5_EXTERNAL!E37"

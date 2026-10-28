@@ -36,8 +36,13 @@ LAYOUT = [("T4", 43), ("H4", 44), ("FXQ_RULE", 45), ("FXQ_AVG", 46), ("FXQ_EOP",
           ("IMPQ_UAH", 60), ("TB_FX", 61), ("REMQ_G", 62), ("REMQ", 63), ("REMQ_OFF", 64), ("REMQ_INF", 65), ("FDIQ", 66),
           ("OTHERQ", 67), ("FINQ", 68), ("NEEDQ", 69), ("GAPQ", 70), ("RES_REVAL", 71), ("RESQ", 72), ("RESQ_M", 73),
           ("RES_CHK", 74), ("REM_CHK", 75), ("T6", 77), ("H6", 78), ("DEBT_START", 79), ("DEBT_REVAL_USD", 80),
-          ("DEBT_REVAL_UAH", 81), ("DEBT_REVAL_GDP", 82), ("NOTE6", 83)]
+          ("DEBT_REVAL_UAH", 81), ("DEBT_REVAL_GDP", 82), ("NOTE6", 83),
+          ("T7", 85), ("H7", 86), ("RES_PRE", 87), ("RES_FLOOR", 88), ("RES_NEED", 89), ("EXTRA_AV", 90), ("EXTRA_FIN", 91),
+          ("IMP_CUT", 92), ("IMP_CUT_SH", 93), ("BOP_CHK", 94), ("NOTE7", 95)]
 QROW = dict(LAYOUT)
+BOP_FIRST = 233
+BOP_ROW = {"FLOOR_M": BOP_FIRST, "FX_CRISIS": BOP_FIRST + 1}
+XF = 294  # SCENARIOS: extra financing partners are ready to give, Base / Pess / Opt / active, columns C:M as rows 202-292
 q4 = lambda c, code, last=False: (f"{QC[Q0[YR[c]] + 3]}{QROW[code]}" if last else f"{QC[Q0[YR[c]]]}{QROW[code]}:{QC[Q0[YR[c]] + 3]}{QROW[code]}")
 YR = {v: k for k, v in YC.items()}
 hq = quarterly()
@@ -58,6 +63,23 @@ out[f"COEFS!A{STEEL_FIRST}:L{STEEL_FIRST + 2}"] = [
      "Доля экспорта, которая идёт морем и следует за портами внутри года (зерно, руда, металл; остальное — сушей, Дунаем, услуги). "
      "Годовой экспорт задаёт B2; это только распределение по кварталам. Оценка Claude"],
 ]
+out[f"COEFS!A{BOP_FIRST}:L{BOP_FIRST + 1}"] = [
+    ["BOP_FLOOR_M", "B5", "BOP", "FLOOR_M", 3, "", "", "", "оценка", "", "2026-10-28",
+     "Порог резервов, месяцев импорта: ниже резервы не опускаются, разрыв закрывается доп. финансированием или сжатием импорта "
+     "(критерий достаточности МВФ — 3 месяца)"],
+    ["BOP_FX_CRISIS", "B5", "BOP", "FX_CRISIS", 2, "", "", "2014–2015", "оценка", "", "2026-10-28",
+     "Доп. девальвация следующего года, п.п. на 1% вынужденного сжатия импорта. 2014–2015: резервы ~1 месяц импорта, "
+     "импорт −30% в год, гривна −40% и −50%. Оценка Claude"],
+]
+EXTRA = {"База": 1500, "Пессимистичный": 0, "Оптимистичный": 3000}
+out[f"SCENARIOS!A{XF - 1}:O{XF + 3}"] = [
+    ["Дополнительное финансирование, если резервы ниже порога (B5_EXTERNAL раздел 7)"]] + [
+    [f"Готовность партнёров дать дополнительно — {k}", "млн USD за квартал, максимум", ""] + [v] * 10 +
+    (["сумма за квартал", "Оценка Claude: база — расширение программы МВФ и ЕС ~6 млрд USD в год; пессимистичный — "
+      "усталость партнёров, ничего сверх обещанного; оптимистичный — до 12 млрд USD в год"] if k == "База" else ["", ""])
+    for k, v in EXTRA.items()] + [
+    ["Готовность партнёров дать дополнительно — активный", "млн USD за квартал, максимум", ""] +
+    [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{c}{XF};{c}{XF + 1};{c}{XF + 2})" for c in "DEFGHIJKLM"] + ["", ""]]
 STEEL_Q = {"E": "AZ117:BC117", "F": "BD117:BG117", "G": "BH117:BK117"}  # B1_REAL section 8, MET_Q by year
 EFG = lambda f: [f(c, p) for c, p in pairs]
 rows = [
@@ -106,8 +128,10 @@ rows = [
     ["RES", "Международные резервы, конец года", "4 кв. раздела 5: прошлый квартал − разрыв + переоценка евро", round(float(a["RES"]))]
     + [f"={q4(c, 'RESQ', last=True)}" for c in "EFG"],
     ["RES_M", "Резервы, месяцев импорта", "резервы / импорт × 12"] + [f"={c}34/{c}26*12" for c in "DEFG"] + ["проверка на листе CHECKS"],
-    ["RES_SHORT", "Не хватает до 3 месяцев импорта", "дополнительное финансирование"] + [f"=MAX(0;3*{c}26/12-{c}34)" for c in "DEFG"],
-    [""],
+    ["EXTRA_FIN", "Дополнительное финансирование сверх обещанного", "сумма кварталов (раздел 7): держит резервы на пороге", 0]
+    + [f"=SUM({q4(c, 'EXTRA_FIN')})" for c in "EFG"] + ["меняет структуру долга (внешний вместо внутреннего), не его сумму"],
+    ["IMP_CUT", "Вынужденное сжатие импорта", "% импорта года: денег нет ни в резервах, ни у партнёров (раздел 7)", 0]
+    + [f"=SUM({q4(c, 'IMP_CUT')})/{c}26*100" for c in "EFG"] + ["→ девальвация следующего года (раздел 4)"],
     ["3. Курс"],
     ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
     ["FX_DEP", "Девальвация гривны (средний курс)", "ИПЦ прошлого года − инфляция еврозоны + 3 п.п. × нехватка резервов ниже 5 месяцев",
@@ -162,14 +186,15 @@ def line(code, name, eq, f, note=""):
 
 fxdep = hq["FX_AVG"] / hq["FX_AVG"].shift() * 100 - 100
 hdr = lambda: ["Код", "Показатель", "Уравнение / единицы"] + QS + ["Комментарий"]
-sec = [[] for _ in range(R["NOTE6"] - 42)]
+sec = [[] for _ in range(R["NOTE7"] - 42)]
 put = lambda code, row: sec.__setitem__(R[code] - 43, row)
 put("T4", ["4. Курс по кварталам (UAH/USD и EUR/USD)"])
 put("H4", hdr())
 put("FXQ_RULE", line("FXQ_RULE", "Девальвация гривны по правилу", "% к прошлому кварталу: ((1 + ИПЦ прошлого года − инфляция еврозоны "
-                     "+ 3 × нехватка резервов ниже 5 мес.)^(1/4) − 1)",
+                     "+ 3 × нехватка резервов ниже 5 мес. + 2 × сжатие импорта прошлого года)^(1/4) − 1)",
                      lambda i, c: round(float(fxdep.loc[QS[i]]), 2) if i <= FACT_FX else (
-                     f"=((1+({PY[year(i)]}$19-{YC[year(i)]}$18+{C('FX','RES')}*MAX(0;{C('FX','MONTHS')}-{PY[year(i)]}$35))/100)^(1/4)-1)*100"),
+                     f"=((1+({PY[year(i)]}$19-{YC[year(i)]}$18+{C('FX','RES')}*MAX(0;{C('FX','MONTHS')}-{PY[year(i)]}$35)"
+                     f"+COEFS!$E${BOP_ROW['FX_CRISIS']}*{PY[year(i)]}$37)/100)^(1/4)-1)*100"),
                      "до 2026Q3 — факт; дальше правило, как в годовом разделе 3: инфляция и резервы с лагом в год"))
 put("FXQ_AVG", line("FXQ_AVG", "Курс UAH/USD, средний", "грн за 1 USD; ANCHORS строка 12", lambda i, c: f"=ANCHORS!{AC[QS[i]]}12",
                     "прогноз в ANCHORS = ориентир SCENARIOS строка 52, иначе прошлый квартал × (1 + правило)"))
@@ -247,9 +272,9 @@ put("GAPQ", line("GAPQ", "Разрыв (потребность − получе�
 put("RES_REVAL", line("RES_REVAL", "Переоценка резервов (евро)", "резервы прошлого квартала × доля евро × изменение EUR/USD",
                       lambda i, c: "" if i == 0 else f"={pc(i)}{R['RESQ']}*{QK('RESQ','EUR_SH')}*({c}{R['EURUSD']}/{pc(i)}{R['EURUSD']}-1)",
                       "COEFS RESQ_EUR_SH — оценка"))
-put("RESQ", line("RESQ", "Международные резервы, конец квартала", "прошлый квартал − разрыв + переоценка",
-                 lambda i, c: f"=ANCHORS!{AC[QS[i]]}24" if i <= FACT_FX else f"={pc(i)}{R['RESQ']}-{c}{R['GAPQ']}+{c}{R['RES_REVAL']}",
-                 "до 2026Q3 — факт; идёт в ANCHORS строка 24"))
+put("RESQ", line("RESQ", "Международные резервы, конец квартала", "до закрытия + доп. финансирование + сжатие импорта",
+                 lambda i, c: f"=ANCHORS!{AC[QS[i]]}24" if i <= FACT_FX else f"={c}{R['RES_PRE']}+{c}{R['EXTRA_FIN']}+{c}{R['IMP_CUT']}",
+                 "до 2026Q3 — факт; дальше раздел 7 (не ниже порога); идёт в ANCHORS строка 24"))
 put("RESQ_M", line("RESQ_M", "Резервы, месяцев импорта", "резервы / импорт 4 кварталов × 12",
                    lambda i, c: "" if i < 3 else f"={c}{R['RESQ']}/SUM({pc(i, 3)}{R['IMPQ']}:{c}{R['IMPQ']})*12"))
 put("RES_CHK", line("RES_CHK", "Проверка: резервы", "не ниже 3 месяцев импорта",
@@ -273,7 +298,38 @@ put("DEBT_REVAL_GDP", line("DEBT_REVAL_GDP", "Переоценка долга, %
                            lambda i, c: "" if i < 4 else f"={c}{R['DEBT_REVAL_UAH']}*1000/SUM(ANCHORS!{AC[year(i) + 'Q1']}8:{AC[year(i) + 'Q4']}8)*100"))
 put("NOTE6", ["Как читать: девальвация на 1 грн за доллар увеличивает валютный долг в гривне на величину долга в млрд USD (в млрд грн). Рост евро к доллару "
               "увеличивает долг в долларах (кредиты ЕС в евро) и резервы (часть резервов в евро). Доли евро — оценки Claude в COEFS."])
-out[f"B5_EXTERNAL!A43:T{R['NOTE6']}"] = sec
+# Section 7: closing the balance of payments (2026-10-28, Andrey agreed the plan). Reserves cannot fall below the floor
+# (COEFS BOP_FLOOR_M months of imports). A shortfall is covered first by extra financing up to what partners are ready
+# to give (SCENARIOS rows XF..XF+3), the rest by a forced cut of imports; the cut devalues the hryvnia next year (section 4).
+SC_Q = lambda i: chr(ord("D") + i - 6)  # SCENARIOS quarterly block: D = 2026Q3
+act = lambda i: f"SCENARIOS!{SC_Q(i)}{XF + 3}"
+closing = lambda f: (lambda i, c: "" if i <= FACT_FX else f(i, c))
+put("T7", ["7. Закрытие платёжного баланса: резервы не ниже порога"])
+put("H7", hdr())
+put("RES_PRE", line("RES_PRE", "Резервы до закрытия", "прошлый квартал − разрыв + переоценка",
+                    closing(lambda i, c: f"={pc(i)}{R['RESQ']}-{c}{R['GAPQ']}+{c}{R['RES_REVAL']}"), "как считались резервы до 28.10.2026"))
+put("RES_FLOOR", line("RES_FLOOR", "Порог резервов", "COEFS BOP_FLOOR_M × импорт 4 кварталов / 12",
+                      closing(lambda i, c: f"=COEFS!$E${BOP_ROW['FLOOR_M']}*SUM({pc(i, 3)}{R['IMPQ']}:{c}{R['IMPQ']})/12"),
+                      "ниже — НБУ не удержит курс (критерий МВФ: 3 месяца импорта)"))
+put("RES_NEED", line("RES_NEED", "Не хватает до порога", "MAX(0; порог − резервы до закрытия)",
+                     closing(lambda i, c: f"=MAX(0;{c}{R['RES_FLOOR']}-{c}{R['RES_PRE']})")))
+put("EXTRA_AV", line("EXTRA_AV", "Партнёры готовы дать дополнительно", f"млн USD за квартал, SCENARIOS строки {XF}–{XF + 3}",
+                     closing(lambda i, c: f"={act(i)}"), "МВФ (расширение программы), ЕС, двусторонние кредиты"))
+put("EXTRA_FIN", line("EXTRA_FIN", "Дополнительное финансирование", "MIN(не хватает; готовы дать)",
+                      closing(lambda i, c: f"=MIN({c}{R['RES_NEED']};{c}{R['EXTRA_AV']})")))
+put("IMP_CUT", line("IMP_CUT", "Вынужденное сжатие импорта", "не хватает − доп. финансирование, млн USD",
+                    closing(lambda i, c: f"={c}{R['RES_NEED']}-{c}{R['EXTRA_FIN']}"),
+                    "импорт в ANCHORS строка 22 — после сжатия; потребность в финансировании — до"))
+put("IMP_CUT_SH", line("IMP_CUT_SH", "Сжатие импорта", "% импорта квартала",
+                       closing(lambda i, c: f"={c}{R['IMP_CUT']}/{c}{R['IMPQ']}*100")))
+put("BOP_CHK", line("BOP_CHK", "Проверка: платёжный баланс", "OK — резервы держатся сами; иначе чем закрыт разрыв",
+                    closing(lambda i, c: f"=IF({c}{R['IMP_CUT']}>0;\"ВНИМАНИЕ: импорт сжат на \"&ROUND({c}{R['IMP_CUT_SH']};1)&\"% — девальвация\";"
+                                         f"IF({c}{R['EXTRA_FIN']}>0;\"ВНИМАНИЕ: нужно доп. финансирование \"&ROUND({c}{R['EXTRA_FIN']}/1000;1)&\" млрд USD\";\"OK\"))")))
+put("NOTE7", ["Как читать: резервы не уходят ниже порога. Если денег не хватает, сначала берётся дополнительное финансирование (сколько готовы "
+              "дать партнёры по сценарию), остальное — сжатие импорта: валюты нет, импортёры не могут купить. Сжатие импорта даёт девальвацию "
+              "следующего года (2 п.п. на 1% импорта, оценка Claude по 2014–2015). Обратная связь на потребление и инвестиции в том же году не "
+              "считается (иначе круговая ссылка): это узкое место показано проверкой."])
+out[f"B5_EXTERNAL!A43:T{R['NOTE7']}"] = sec
 
 # EUR/USD by scenario (SCENARIOS rows 196-199): written only without --coefs
 EUR = {"Base": [1.15, 1.15, 1.15], "Pess": [1.15, 1.10, 1.08], "Opt": [1.15, 1.18, 1.20]}
@@ -290,7 +346,8 @@ out[f"SCENARIOS!A{EUR_SC - 3}:O{EUR_SC}"] = [
 fq = {q: QC[i] for i, q in enumerate(QS)}
 out["ANCHORS!BD13:BK13"] = [[f"=B5_EXTERNAL!{fq[q]}{R['FXQ_EOP']}" for q in QS[8:]]]
 out["ANCHORS!BB21:BK21"] = [[f"=B5_EXTERNAL!{fq[q]}{R['EXPQ']}" for q in QS[6:]]]
-out["ANCHORS!BB22:BK22"] = [[f"=B5_EXTERNAL!{fq[q]}{R['IMPQ']}" for q in QS[6:]]]
+out["ANCHORS!BB22:BK22"] = [[f"=B5_EXTERNAL!{fq[q]}{R['IMPQ']}" + ("" if i <= FACT_FX else f"-B5_EXTERNAL!{fq[q]}{R['IMP_CUT']}")
+                            for i, q in enumerate(QS) if i >= 6]]
 out["ANCHORS!BC24:BK24"] = [[f"=B5_EXTERNAL!{fq[q]}{R['RESQ']}" for q in QS[7:]]]
 out["ANCHORS!AV28:BK28"] = [[f"=B5_EXTERNAL!{fq[q]}{R['NEEDQ']}" for q in QS]]
 if "--coefs" in sys.argv:
@@ -302,4 +359,11 @@ out["ANCHORS!BD29"] = [[f"={look('BD', 32)}/4"]]
 out["B3_PRICES!F11:G11"] = [["=B5_EXTERNAL!F40", "=B5_EXTERNAL!G40"]]
 out["B3_PRICES!H11"] = [["2026: курс из ANCHORS. 2027–2028 — из B5_EXTERNAL (инфляционный разрыв и резервы)"]]
 out["CHECKS!A23:C24"] = [["Резервы, месяцев импорта", "Резервы / импорт × 12; не ниже порога", 3], ["  статус"]]
+# the reserves stay at the floor now, so the strain shows here: imports nobody can pay for (section 7)
+chk = lambda c, b: (f"=IF({c}40=\"\";\"нет данных\";IF({c}40<=$C$40;IF(B5_EXTERNAL!{b}36>0;\"OK: нужно доп. финансирование \"&"
+                    f"ROUND(B5_EXTERNAL!{b}36/1000;1)&\" млрд USD\";\"OK\");\"ВНИМАНИЕ\"))")
+out["CHECKS!A40:Q41"] = [
+    ["Платёжный баланс: вынужденное сжатие импорта", "% импорта года, который нечем оплатить: резервы на пороге, доп. финансирование "
+     "исчерпано (B5_EXTERNAL строка 37); не выше порога", 0] + [""] * 11 + [f"=B5_EXTERNAL!{b}37" for b in "EFG"],
+    ["  статус", "", ""] + [""] * 11 + [chk(c, b) for c, b in zip("OPQ", "EFG")]]
 json.dump(out, sys.stdout, ensure_ascii=False)
