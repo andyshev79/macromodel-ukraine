@@ -109,6 +109,11 @@ CF, FLAG, PHH, PI = SEC5 + 2, SEC5 + 3, SEC5 + 4, SEC5 + 5
 peace_y = lambda c: f"SUMIF($H$30:$BK$30;{c}$19;$H${{r}}:$BK${{r}})/4"
 GFCF_MET_ROW = 232
 GFCF_MET = 0.03
+# Port-dependent share K of the sector moves with the ports' level against 2025 (D12), the rest does not:
+# growth = ((1 - K) + K * ports / ports 2025) / (same a year ago) - 1. Closing and reopening the ports cancel out,
+# and a fall cannot take more than the share K (2026-10-28; was K x % change of the ports).
+port_g = lambda k, c, p: f"(((1-{k})+{k}*{c}$12/$D$12)/((1-{k})+{k}*{p}$12/$D$12)*100-100)"
+
 eqs = {
     "HH": (f"{kv('HH', 'const')} + {kv('HH', 'REAL_WAGE')} × рост реальных трудовых доходов + влияние ставки (B7) + эффект мира "
            "(только кварталы после прекращения огня, раздел 5)",
@@ -121,9 +126,9 @@ eqs = {
              "(капвложения металлургов и руды) + восстановление (только кварталы после прекращения огня, раздел 5)",
              lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40"
                           f"+COEFS!$E${GFCF_MET_ROW}*(B1_REAL!{c}$16-B1_REAL!{p}$16)+" + peace_y(c).format(r=PI)),
-    "EXP": (f"агро ({AGRO_SH_TXT}) × реальный агроэкспорт B10 + остальное × (−3,1 + 0,28 × рост портов + "
+    "EXP": (f"агро ({AGRO_SH_TXT}) × реальный агроэкспорт B10 + остальное × (−3,1 + 0,28 (доля, что следует за уровнем портов к 2025) + "
             + f"{estimated()['MET_X'][0]:.2f}".replace(".", ",") + " × изменение загрузки металлургии)",
-            lambda c, p: f"={AGRO_SH}*B10_AGRO!{c}41+(1-{AGRO_SH})*({C('EXP','const')}+{C('EXP','PORTS')}*LN({c}$12/{p}$12)*100"
+            lambda c, p: f"={AGRO_SH}*B10_AGRO!{c}41+(1-{AGRO_SH})*({C('EXP','const')}+{port_g(C('EXP','PORTS'), c, p)}"
                          f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16))"),
     "IMP": (f"оборонный ({pnum('GDPE_IMP', 'DEF_SH')}) × рост реальных расходов на оборону + гражданский × "
             f"({kv('IMP', 'const')} + {kv('IMP', 'DOM_DEMAND')} × рост внутреннего спроса)",

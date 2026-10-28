@@ -308,7 +308,7 @@ def test_peace_by_quarter():
     rows = {r[0]: r for r in p["B2_DEMAND!A18:G27"] if r and r[0]}
     assert "$H$54:$BK$54)/4" in rows["GDPE_HH"][5] and "SCENARIOS!" not in rows["GDPE_HH"][5]
     assert "$H$55:$BK$55)/4" in rows["GDPE_GFCF"][5] and "COEFS!$E$232*(B1_REAL!F$16-B1_REAL!E$16)" in rows["GDPE_GFCF"][5]
-    assert "LN(F$12/E$12)" in rows["GDPE_EXP"][5]  # closing and reopening the ports is symmetric
+    assert "COEFS!$E$30*F$12/$D$12" in rows["GDPE_EXP"][5]  # port-dependent share follows the ports level against 2025
     q = p["B2_DEMAND!H51:BK55"]
     assert len(q[0]) == 56 and q[0][0] == "=H$31" and q[0][-1] == "=BK$31"
     assert q[2][0] == '=IF($C$52="нет";0;IF(H$31>=$C$52;1;0))'
