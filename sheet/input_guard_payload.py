@@ -6,15 +6,15 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax.
 """
 import json
 
-RANGES = ["C17:N33", "C40:L53", "C82:L117", "C205:M292"]  # numeric input rows: annual, quarterly near-term, labour, quarterly block
-DATE_RANGES = [("C17:N33", "*(ROW(SCENARIOS!C17:N33)<>20)"), ("C43:L53", ""), ("C82:L117", ""), ("C205:M292", "")]  # row 20: financing in USD mn
+RANGES = ["C17:N33", "C40:L53", "C82:L117", "C205:M297"]  # numeric input rows: annual, quarterly near-term, labour, quarterly block
+DATE_RANGES = [("C17:N33", "*(ROW(SCENARIOS!C17:N33)<>20)"), ("C43:L53", ""), ("C82:L117", ""), ("C205:M297", "")]  # row 20: financing in USD mn
 LO, HI = 45000, 47000  # date serials of 2023-2028
 
 text = "+".join(f"SUMPRODUCT(--ISTEXT(SCENARIOS!{r}))" for r in RANGES)
 dates = "+".join(f"SUMPRODUCT(ISNUMBER(SCENARIOS!{r})*(SCENARIOS!{r}>{LO})*(SCENARIOS!{r}<{HI}){extra})" for r, extra in DATE_RANGES)
 out = {"CHECKS!A37:D38": [
     ["Ввод SCENARIOS: числа не стали текстом или датами",
-     "Число ячеек ввода (строки 17–33, 40–53, 82–117, 205–292) с текстом или датой («0.9» с точкой в русской локали остаётся "
+     "Число ячеек ввода (строки 17–33, 40–53, 82–117, 205–297) с текстом или датой («0.9» с точкой в русской локали остаётся "
      "текстом, «11.5» становится 11 мая); вводите дроби через запятую", "0", f"=IFERROR({text}+{dates};-1)"],
     ["  статус", "", "", '=IF(D37=0;"OK";IF(D37<0;"ВНИМАНИЕ: ошибка в ячейках ввода";"ВНИМАНИЕ: "&D37&" ячеек с текстом или датой"))'],
 ]}
