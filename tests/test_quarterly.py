@@ -75,7 +75,8 @@ def test_b4_wage_links():
     assert out["ANCHORS!BB20:BK20"][0][0] == f"=B4_LABOUR!J{code['WAGE']}"
     # Q4 also moves by a third of the change in the December premium
     assert rows[code["WAGE"] - 1][10] == (f"=G{code['WAGE']}*(1+(K{code['NW_F']}+K{code['ADJ']})/100)"
-                                          f"*(1+K{code['DEC_P']}/300)/(1+G{code['DEC_P']}/300)")
+                                          f"*(1+K{code['DEC_P']}/300)/(1+G{code['DEC_P']}/300)"
+                                          f"*(1-K{code['WAGE_LOSS']}/100)/(1-G{code['WAGE_LOSS']}/100)")
     lean = json.loads(subprocess.run([sys.executable, "sheet/b4_payload.py", "--coefs"], capture_output=True, text=True, check=True, env=env).stdout)
     assert not any(k.startswith("SCENARIOS") for k in lean)
 
@@ -335,3 +336,17 @@ def test_bop_closure():
     assert sc[4][3] == "=CHOOSE(MATCH($C$3;$A$8:$A$10;0);D294;D295;D296)" and sc[2][3] == 0
     assert [r[4] for r in p["COEFS!A233:L234"]] == [3, 2]
     assert p["CHECKS!A40:Q41"][0][14] == "=B5_EXTERNAL!E37"
+
+
+def test_idle_pay_layoffs():
+    """Idle mills and ports: 2/3 pay lowers the average wage, layoffs after two idle quarters raise unemployment."""
+    p = payload("b4_payload")
+    rows = p["B4_LABOUR!A1:T105"]
+    r = {row[0]: i + 1 for i, row in enumerate(rows) if row and row[0]}
+    assert r["LAYOFF_U"] == 105 and r["WAGE_LOSS"] == 104
+    assert rows[r["UNEMP"] - 1][12].endswith("+M105-I105")
+    assert rows[r["WAGE"] - 1][12].endswith("*(1-M104/100)/(1-I104/100)")
+    assert rows[r["IDLE_MET"] - 1][9] == "=MAX(0;1-B1_REAL!BB117/100)"
+    assert rows[r["LAYOFF_N"] - 1][11] == "=COEFS!$E$240*MIN(K101;J101)"
+    assert not any("§" in str(v) for row in rows for v in row)
+    assert [x[4] for x in p["COEFS!A235:L240"]] == [160, 30, 0.667, 1.2, 5500, 0.3]
