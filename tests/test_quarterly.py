@@ -350,3 +350,15 @@ def test_idle_pay_layoffs():
     assert rows[r["LAYOFF_N"] - 1][11] == "=COEFS!$E$240*MIN(K101;J101)"
     assert not any("§" in str(v) for row in rows for v in row)
     assert [x[4] for x in p["COEFS!A235:L240"]] == [160, 30, 0.667, 1.2, 5500, 0.3]
+
+
+def test_deficit_2026_by_treasury_months():
+    p = payload("b6_payload")
+    sec = p["B6_FISCAL!A49:P56"]
+    fact = sec[2][3:15]
+    assert len([v for v in fact if v != ""]) == 8  # January-August 2026
+    assert abs(sum(fact[:6]) - 303.15) < 0.1  # H1 matches the actual quarters in ANCHORS
+    assert sec[4][3:15][8] == "=IF(L51<>\"\";L51;$D$52)"  # September: fact or the rest of the year
+    q3, q4 = p["ANCHORS!BB27:BC27"][0]
+    assert "J$53:$L$53" in q3 and "SUM($AZ27:$BB27)" in q4  # Q4 closes the annual deficit
+    assert p["CHECKS!A43:D44"][0][3] == "=B6_FISCAL!D55"
