@@ -87,6 +87,10 @@ out["B1_REAL!A1:H15"] = text
 out["B1_REAL!A16:H16"] = [["MET", "Металлургия: загрузка мощностей", "% от 2025", 100,
                            "=SCENARIOS!L63", "=SCENARIOS!M63", "=SCENARIOS!N63", "SCENARIOS (отраслевые шоки)"]]
 MET = lambda s, c, p: f"+COEFS!$E${SHOCK_ROW['MET_' + s]}*({c}$16-{p}$16)"
+# Port-dependent share K of the sector moves with the ports' level against 2025 (D12), the rest does not:
+# growth = ((1 - K) + K * ports / ports 2025) / (same a year ago) - 1. Closing and reopening the ports cancel out,
+# and a fall cannot take more than the share K (2026-10-28; was K x % change of the ports).
+port_g = lambda k, c, p: f"(((1-{k})+{k}*{c}$12/$D$12)/((1-{k})+{k}*{p}$12/$D$12)*100-100)"
 
 g = annual_growth(real_levels_q())
 F_REC_ROW = 171  # after B2 peace rows 168-170
@@ -115,8 +119,8 @@ out[f"COEFS!A{TR_FIRST}:L{TR_FIRST + len(tr) - 1}"] = [
      r["period"], r["method"], float(r["r2"]), "2026-10-27", r["note"]] for r in tr]
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
-    "B": (f"{kv('B','const')} + {kv('B','PORTS')} × рост портов + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
-          lambda c, p: f"={C('B','const')}+{C('B','PORTS')}*LN({c}$12/{p}$12)*100+{C('B','CAP')}*({c}$13/{p}$13-1)*100{MET('B', c, p)}"),
+    "B": (f"{kv('B','const')} + {kv('B','PORTS')} (доля, что следует за уровнем портов к 2025) + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
+          lambda c, p: f"={C('B','const')}+{port_g(C('B','PORTS'), c, p)}+{C('B','CAP')}*({c}$13/{p}$13-1)*100{MET('B', c, p)}"),
     "C": ("снизу вверх: 4 блока (металлургия, пищепром, машиностроение с ОПК, другое), раздел 6",
           lambda c, p: f"={c}{CB_ROW['GVA_C_BU']}"),
     "D": ("рост мощности (эластичность 1)", lambda c, p: f"={C('D','const')}+{C('D','CAP')}*({c}$13/{p}$13-1)*100"),
@@ -126,7 +130,7 @@ eq = {
           f"{num(TR[('GVA_G_RW', 'RW_POS')])} × рост реальной зарплаты (B4 строка {RW_B4}, без детенизации)",
           lambda c, p: f"=COEFS!$E${TR_ROW['const']}+COEFS!$E${TR_ROW['RW_NEG']}*MIN(B4_LABOUR!{c}${RW_B4};0)"
                        f"+COEFS!$E${TR_ROW['RW_POS']}*MAX(B4_LABOUR!{c}${RW_B4};0)"),
-    "H": ("−0,55 + 0,22 × рост портов", lambda c, p: f"={C('H','const')}+{C('H','PORTS')}*LN({c}$12/{p}$12)*100"),
+    "H": ("−0,55 + 0,22 (доля, что следует за уровнем портов к 2025)", lambda c, p: f"={C('H','const')}+{port_g(C('H','PORTS'), c, p)}"),
     "J": ("тренд 2024–2025", lambda c, p: f"={C('J','const')}"),
     "O": ("доля обороны × рост численности военных + доля госуправления × рост штата (раздел 5)",
           lambda c, p: f"={c}{O_ROW['GVA_O']}"),
