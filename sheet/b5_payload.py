@@ -48,12 +48,15 @@ pairs = list(zip("EFG", "DEF"))
 # rolled steel that the stopped mills no longer supply comes in as imports (Andrey, 28.10.2026): domestic supply of
 # rolled steel × the idle share of metallurgy by quarter (B1_REAL row 117) × import price
 STEEL_FIRST = 229
-out[f"COEFS!A{STEEL_FIRST}:L{STEEL_FIRST + 1}"] = [
+out[f"COEFS!A{STEEL_FIRST}:L{STEEL_FIRST + 2}"] = [
     ["STEEL_IMP_DOM", "B5", "STEEL_IMP", "DOM", 2040, "", "", "2025", "оценка", "", "2026-10-28",
      "Свой прокат на внутреннем рынке, тыс. т в год: потребление 3,4 млн т × (1 − 40,1% импорта), GMK Center / Метинвест-СМЦ 2025; "
      "около трети — арматура и сортовой прокат для стройки"],
     ["STEEL_IMP_PRICE", "B5", "STEEL_IMP", "PRICE", 650, "", "", "2025–2026", "оценка", "", "2026-10-28",
      "Цена импортного проката, USD/т (арматура ~600, лист ~700). Оценка Claude"],
+    ["EXPQ_PORT_SEA", "B5", "EXPQ_PORT", "SEA", 0.4, "", "", "", "калибровка", "", "2026-10-28",
+     "Доля экспорта, которая идёт морем и следует за портами внутри года (зерно, руда, металл; остальное — сушей, Дунаем, услуги). "
+     "Годовой экспорт задаёт B2; это только распределение по кварталам. Оценка Claude"],
 ]
 STEEL_Q = {"E": "AZ117:BC117", "F": "BD117:BG117", "G": "BH117:BK117"}  # B1_REAL section 8, MET_Q by year
 EFG = lambda f: [f(c, p) for c, p in pairs]
@@ -180,7 +183,23 @@ put("EURUSD_G", line("EURUSD_G", "Рост EUR/USD", "% г/г", lambda i, c: "" 
 put("EURUAH", line("EURUAH", "Курс UAH/EUR, средний", "UAH/USD × EUR/USD", lambda i, c: f"={c}{R['FXQ_AVG']}*{c}{R['EURUSD']}"))
 put("T5", ["5. Торговля, переводы и резервы по кварталам, млн USD"])
 put("H5", hdr())
-put("SEAS_EXP", line("SEAS_EXP", "Доля квартала в экспорте года", "среднее 2023–2025", lambda i, c: round(float(seas.loc[QS[i][-1], "EXP_USD"]), 3)))
+# exports by quarter follow the ports inside the year: the 2023–2025 seasonal share tilted by the quarter's port capacity
+# over the year's average (B1_REAL row 116), normalised to sum to 1 over the year (Andrey, 28.10: ports closed in August)
+B1Q = lambda i: col(47 + i)  # B1_REAL: AV = 2025Q1
+s_exp = {q: round(float(seas.loc[q, "EXP_USD"]), 3) for q in "1234"}
+
+
+def seas_exp(i, c):
+    if i < 4:
+        return s_exp[QS[i][-1]]
+    y0 = i - i % 4
+    avg = f"AVERAGE(B1_REAL!{B1Q(y0)}116:{B1Q(y0 + 3)}116)"
+    tilt = lambda j: f"{nm(s_exp[QS[j][-1]], 3)}*(1+COEFS!$E${STEEL_FIRST + 2}*(B1_REAL!{B1Q(j)}116/{avg}-1))"
+    return f"={tilt(i)}/({'+'.join(tilt(j) for j in range(y0, y0 + 4))})"
+
+
+put("SEAS_EXP", line("SEAS_EXP", "Доля квартала в экспорте года", "среднее 2023–2025 × (1 + доля морского экспорта × (порты квартала / "
+                     "среднее за год − 1)), сумма за год = 1", seas_exp, "порты: B1_REAL строка 116"))
 put("SEAS_IMP", line("SEAS_IMP", "Доля квартала в импорте года", "среднее 2023–2025", lambda i, c: round(float(seas.loc[QS[i][-1], "IMP_USD"]), 3)))
 for code, src, arow, name in (("EXPQ", "EXP_USD", 24, "Экспорт товаров и услуг"), ("IMPQ", "IMP_USD", 26, "Импорт товаров и услуг")):
     sh = R["SEAS_EXP"] if code == "EXPQ" else R["SEAS_IMP"]
@@ -283,6 +302,4 @@ out["ANCHORS!BD29"] = [[f"={look('BD', 32)}/4"]]
 out["B3_PRICES!F11:G11"] = [["=B5_EXTERNAL!F40", "=B5_EXTERNAL!G40"]]
 out["B3_PRICES!H11"] = [["2026: курс из ANCHORS. 2027–2028 — из B5_EXTERNAL (инфляционный разрыв и резервы)"]]
 out["CHECKS!A23:C24"] = [["Резервы, месяцев импорта", "Резервы / импорт × 12; не ниже порога", 3], ["  статус"]]
-from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
-
-json.dump(protect(out), sys.stdout, ensure_ascii=False)
+json.dump(out, sys.stdout, ensure_ascii=False)
