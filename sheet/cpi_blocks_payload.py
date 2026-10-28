@@ -126,4 +126,6 @@ out[f"SCENARIOS!A{BRENT_ROW - 1}:O{BRENT_ROW}"] = [
 ]
 if "--coefs" in sys.argv:
     out = {k: v for k, v in out.items() if k.startswith("COEFS")}
-json.dump(out, sys.stdout, ensure_ascii=False)
+from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
+
+json.dump(protect(out), sys.stdout, ensure_ascii=False)

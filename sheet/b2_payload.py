@@ -162,4 +162,6 @@ out["COEFS!A35:L35"] = [["GVA_OTHER_HH", "B1", "GVA_OTHER", "GDPE_HH", round(flo
                          round(float(link["se"]["HH"]), 2), round(float(link["coef"]["HH"] / link["se"]["HH"]), 1),
                          "2016–2025", "оценка МНК 2016–2025, годовые, дамми 2022", round(float(link["r2"]), 2),
                          "2026-10-21", "Торговля и госуправление к спросу не привязаны: оценка дала отрицательный наклон"]]
-json.dump(out, sys.stdout, ensure_ascii=False)
+from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
+
+json.dump(protect(out), sys.stdout, ensure_ascii=False)

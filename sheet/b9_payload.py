@@ -158,4 +158,6 @@ text += [
      "", f"начато {ag['year']}, {ag['quarters']} кв., к прошлому году"],
 ]
 out[f"B9_CONSTRUCTION!A1:H{len(text)}"] = text
-json.dump(out, sys.stdout, ensure_ascii=False)
+from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
+
+json.dump(protect(out), sys.stdout, ensure_ascii=False)

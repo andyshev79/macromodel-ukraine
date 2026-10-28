@@ -270,4 +270,6 @@ out["ANCHORS!BD29"] = [[f"={look('BD', 32)}/4"]]
 out["B3_PRICES!F11:G11"] = [["=B5_EXTERNAL!F40", "=B5_EXTERNAL!G40"]]
 out["B3_PRICES!H11"] = [["2026: курс из ANCHORS. 2027–2028 — из B5_EXTERNAL (инфляционный разрыв и резервы)"]]
 out["CHECKS!A23:C24"] = [["Резервы, месяцев импорта", "Резервы / импорт × 12; не ниже порога", 3], ["  статус"]]
-json.dump(out, sys.stdout, ensure_ascii=False)
+from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
+
+json.dump(protect(out), sys.stdout, ensure_ascii=False)

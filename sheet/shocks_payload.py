@@ -63,4 +63,6 @@ out[f"SCENARIOS!A{FUEL_ROW - 1}:L{FUEL_ROW + 1}"] = [
 ]
 if "--coefs" in sys.argv:  # SCENARIOS rows hold the user's shock inputs: rewrite only on a fresh frame
     out = {k: v for k, v in out.items() if k.startswith("COEFS")}
-json.dump(out, sys.stdout, ensure_ascii=False)
+from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
+
+json.dump(protect(out), sys.stdout, ensure_ascii=False)

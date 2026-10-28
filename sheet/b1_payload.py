@@ -162,6 +162,12 @@ out[f"B1_REAL!H{r_g}"] = [["=" + "&\" · \"&".join(
 hdr = [["3. Реальная ВДС по кварталам, млн грн в ценах 2021"],
        ["", "", "", "", "", "", "Год"] + [f"=ANCHORS!{QCOL[q]}2" for q in QUARTERS],
        ["Код", "Отрасль", "", "", "", "", ""] + [f"=ANCHORS!{QCOL[q]}4" for q in QUARTERS]]
+# 8. Quarterly scenario drivers (from 2026-10-28): energy, ports and metallurgy by quarter correct the annual growth
+QD_FIRST = 113
+QD_CODES = ["CAP_Q", "PORTS_Q", "MET_Q", "CAP_G", "PORTS_G", "MET_G", "MET_D", "CAP_GY", "PORTS_GY", "MET_GY", "MET_DY",
+            "CORR_B", "CORR_C", "CORR_D", "CORR_H", "CORR_OT_MKT"]
+QD = {k: QD_FIRST + 2 + i for i, k in enumerate(QD_CODES)}
+CORR = {"B": QD["CORR_B"], "C": QD["CORR_C"], "D": QD["CORR_D"], "H": QD["CORR_H"], "OT_MKT": QD["CORR_OT_MKT"]}
 body = []
 for k, s in enumerate(CODES):
     r = S3 + k
@@ -171,7 +177,8 @@ for k, s in enumerate(CODES):
             line.append(round(float(lv.loc[q, s]), 1))
         else:
             c, p = QCOL[q], QCOL[QUARTERS[i - 4]]
-            line.append(f"={p}{r}*(1+INDEX($E${S2 + k}:$G${S2 + k};MATCH({c}${S3 - 2};$E$18:$G$18;0))/100)")
+            corr = f"+{c}{CORR[s]}" if s in CORR else ""
+            line.append(f"={p}{r}*(1+(INDEX($E${S2 + k}:$G${S2 + k};MATCH({c}${S3 - 2};$E$18:$G$18;0)){corr})/100)")
     body.append(line)
 body.append(["GDP_REAL_P", "ВВП по производству", "", "", "", "", ""] + [f"=SUM({QCOL[q]}{S3}:{QCOL[q]}{GDP3 - 1})" for q in QUARTERS])
 out[f"B1_REAL!A{S3 - 3}:BK{GDP3}"] = [r for r in hdr] + body
@@ -368,6 +375,67 @@ pb = [["7а. Образование и здравоохранение: став�
 assert len(pb) == P["PUB_FLOOR"] - 99
 out[f"B1_REAL!A100:H{P['PUB_FLOOR']}"] = pb
 
+# 8. Quarterly drivers: the annual equation (section 2) gives the growth of the year; a quarter whose driver moves
+# differently from the year (war until the ceasefire quarter, recovery after it) gets the same coefficients times the
+# difference between its own y/y driver change and the annual one. Over a year the corrections roughly cancel.
+from sheet.scenarios_quarterly_payload import QCOLS as SQ_COLS, QLAB as SQ_LAB, ROW as SQ_ROW
+
+FQ = [q for q in QUARTERS if q > LAST]
+SQ = dict(zip(SQ_LAB, SQ_COLS))
+q_lvl = lambda annual_row, sc: lambda q: (f"=$D${annual_row}" if q[:4] == "2025" else
+                                          f"=SCENARIOS!$C${SQ_ROW[sc] + 3}" if q <= LAST else f"=SCENARIOS!{SQ[q]}{SQ_ROW[sc] + 3}")
+yr = lambda c, row, f: f.format(cur=f"INDEX($E${row}:$G${row};MATCH({c}${S3 - 2};$E$18:$G$18;0))",
+                                prv=f"INDEX($D${row}:$F${row};MATCH({c}${S3 - 2};$E$18:$G$18;0))")
+prev = {q: QCOL[QUARTERS[i - 4]] for i, q in enumerate(QUARTERS) if i >= 4}
+d = QD
+qd_def = [
+    ("CAP_Q", "Мощность энергосистемы по кварталам", "ГВт, активный сценарий (SCENARIOS)", "lvl", q_lvl(13, "CAP")),
+    ("PORTS_Q", "Пропускная способность портов по кварталам", "млн т в год", "lvl", q_lvl(12, "PORTS")),
+    ("MET_Q", "Загрузка металлургии по кварталам", "% от 2025", "lvl", q_lvl(16, "MET")),
+    # the quarter's y/y change over the previous year's average level, not over the same quarter: from a war-time base
+    # (ports 20, metallurgy 5) a plain growth rate explodes to hundreds of percent; this way the four corrections of a
+    # year sum to zero and the year keeps the growth of section 2
+    ("CAP_G", "Мощность: изменение квартала г/г к среднему прошлого года", "%", "fq", lambda q: "=" + yr(QCOL[q], 13,
+        f"({QCOL[q]}{d['CAP_Q']}-{prev[q]}{d['CAP_Q']})/{{prv}}*100")),
+    ("PORTS_G", "Порты: изменение квартала г/г к среднему прошлого года", "%", "fq", lambda q: "=" + yr(QCOL[q], 12,
+        f"({QCOL[q]}{d['PORTS_Q']}-{prev[q]}{d['PORTS_Q']})/{{prv}}*100")),
+    ("MET_G", "Металлургия: изменение квартала г/г к среднему прошлого года", "%", "fq", lambda q: "=" + yr(QCOL[q], 16,
+        f"({QCOL[q]}{d['MET_Q']}-{prev[q]}{d['MET_Q']})/{{prv}}*100")),
+    ("MET_D", "Металлургия: изменение квартала г/г", "п. от 2025", "fq", lambda q: f"={QCOL[q]}{d['MET_Q']}-{prev[q]}{d['MET_Q']}"),
+    ("CAP_GY", "Мощность: рост за год (раздел 1)", "%", "fq", lambda q: "=" + yr(QCOL[q], 13, "({cur}/{prv}-1)*100")),
+    ("PORTS_GY", "Порты: рост за год (раздел 1)", "%", "fq", lambda q: "=" + yr(QCOL[q], 12, "({cur}/{prv}-1)*100")),
+    ("MET_GY", "Металлургия: рост за год (раздел 1)", "%", "fq", lambda q: "=" + yr(QCOL[q], 16, "({cur}/{prv}-1)*100")),
+    ("MET_DY", "Металлургия: изменение за год", "п. от 2025", "fq", lambda q: "=" + yr(QCOL[q], 16, "{cur}-{prv}")),
+    ("CORR_B", "Поправка квартала: добыча", "п.п. к годовому росту",  "fq", lambda q, c=None: (lambda c:
+        f"={C('B','PORTS')}*({c}{d['PORTS_G']}-{c}{d['PORTS_GY']})+{C('B','CAP')}*({c}{d['CAP_G']}-{c}{d['CAP_GY']})"
+        f"+COEFS!$E${SHOCK_ROW['MET_B']}*({c}{d['MET_D']}-{c}{d['MET_DY']})")(QCOL[q])),
+    ("CORR_C", "Поправка квартала: переработка", "п.п.", "fq", lambda q: (lambda c:
+        f"={M('GVA_C_LINK','IND_C')}*{M('GVA_C_W','MET')}*({c}{d['MET_G']}-{c}{d['MET_GY']})"
+        f"+{C('C','CAP')}*({c}{d['CAP_G']}-{c}{d['CAP_GY']})")(QCOL[q])),
+    ("CORR_D", "Поправка квартала: энергетика", "п.п.", "fq", lambda q: (lambda c:
+        f"={C('D','CAP')}*({c}{d['CAP_G']}-{c}{d['CAP_GY']})")(QCOL[q])),
+    ("CORR_H", "Поправка квартала: транспорт", "п.п.", "fq", lambda q: (lambda c:
+        f"={C('H','PORTS')}*({c}{d['PORTS_G']}-{c}{d['PORTS_GY']})")(QCOL[q])),
+    ("CORR_OT_MKT", "Поправка квартала: рыночные услуги", "п.п.", "fq", lambda q: (lambda c:
+        f"={O('GVA_OT_MKT','CAP')}*({c}{d['CAP_G']}-{c}{d['CAP_GY']})")(QCOL[q])),
+]
+assert [x[0] for x in qd_def] == QD_CODES
+sec8 = [["8. Квартальные драйверы сценария: мощность, порты, металлургия по кварталам"],
+        ["Код", "Показатель", "Единицы", "", "", "", "Квартал"] + [f"=ANCHORS!{QCOL[q]}4" for q in QUARTERS]]
+for code_, name, unit, kind, f in qd_def:
+    line = [code_, name, unit, "", "", "", ""]
+    for q in QUARTERS:
+        if kind == "lvl":
+            line.append(f(q) if q >= "2025Q1" else "")
+        else:
+            line.append(f(q) if q > LAST else "")
+    sec8.append(line)
+sec8.append(["Как читать: до квартала прекращения огня мощность, порты и металлургия на уровне войны, после — восстановление "
+             "(SCENARIOS, квартальный блок). Поправка = коэффициент уравнения раздела 2 × (изменение драйвера в квартале г/г − "
+             "изменение за год). Она идёт в раздел 3: квартал = тот же квартал прошлого года × (1 + годовой рост + поправка)."])
+assert len(sec8) == len(QD_CODES) + 3
+out[f"B1_REAL!A{QD_FIRST}:BK{QD_FIRST + len(sec8) - 1}"] = sec8
+
 # SCENARIOS defaults for the pay fund (Claude estimates; 2026 from the budget law). Written only without --coefs.
 PUB_FUND = {"Base": [25.5, 14, 10], "Pess": [25.5, 8, 6], "Opt": [25.5, 15, 12]}
 out[f"SCENARIOS!A{PUB_SC - 3}:O{PUB_SC}"] = [
@@ -382,4 +450,6 @@ out[f"SCENARIOS!A{PUB_SC - 3}:O{PUB_SC}"] = [
 if "--coefs" in sys.argv:
     out = {k: v for k, v in out.items() if not k.startswith("SCENARIOS")}
 
-json.dump(out, sys.stdout, ensure_ascii=False)
+from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
+
+json.dump(protect(out), sys.stdout, ensure_ascii=False)
