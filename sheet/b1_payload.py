@@ -13,6 +13,10 @@ from macromodel.blocks.real_sector import (SECTORS, annual_growth, coef_table, m
                                           trade_coef_rows, trade_fit)
 from macromodel.blocks.demand import link_other_to_consumption
 from macromodel.blocks.shocks import SHOCK_ROW, SHOCKS, estimated
+from sheet import recovery_layout as RL
+from sheet import recovery_payload as REC
+
+B8Y = dict(zip("DEFG", "NOPQ"))  # B1 annual columns -> year columns of B8_CAPACITY section 3
 
 QUARTERS = [f"{y}Q{q}" for y in range(2015, 2029) for q in range(1, 5)]
 
@@ -119,8 +123,9 @@ out[f"COEFS!A{TR_FIRST}:L{TR_FIRST + len(tr) - 1}"] = [
      r["period"], r["method"], float(r["r2"]), "2026-10-27", r["note"]] for r in tr]
 eq = {
     "A": ("−1,68 + 0,66 × рост урожая", lambda c, p: f"={C('A','const')}+{C('A','HARVEST')}*({c}$11/{p}$11-1)*100"),
-    "B": (f"{kv('B','const')} + {kv('B','PORTS')} (доля, что следует за уровнем портов к 2025) + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение загрузки металлургии",
-          lambda c, p: f"={C('B','const')}+{port_g(C('B','PORTS'), c, p)}+{C('B','CAP')}*({c}$13/{p}$13-1)*100{MET('B', c, p)}"),
+    "B": (f"{kv('B','const')} + {kv('B','PORTS')} (доля, что следует за уровнем портов к 2025) + {kv('B','CAP')} × рост мощности + {met['MET_B']} × изменение спроса на руду (свои заводы + экспорт после прекращения огня, B8_CAPACITY раздел 3)",
+          lambda c, p: f"={C('B','const')}+{port_g(C('B','PORTS'), c, p)}+{C('B','CAP')}*({c}$13/{p}$13-1)*100"
+                       f"+COEFS!$E${SHOCK_ROW['MET_B']}*(B8_CAPACITY!{B8Y[c]}{RL.ACT['ORE']}-B8_CAPACITY!{B8Y[p]}{RL.ACT['ORE']})"),
     "C": ("снизу вверх: 4 блока (металлургия, пищепром, машиностроение с ОПК, другое), раздел 6",
           lambda c, p: f"={c}{CB_ROW['GVA_C_BU']}"),
     "D": ("рост мощности (эластичность 1)", lambda c, p: f"={C('D','const')}+{C('D','CAP')}*({c}$13/{p}$13-1)*100"),
@@ -265,6 +270,17 @@ h25 = lambda k: round(float(md[k].mean()), 1)
 R = CB_ROW
 # the peace effect of SCENARIOS row 124 by quarter, averaged over the year (B2_DEMAND section 5)
 gfcf_x = lambda c: f"(COEFS!$E$27+B7_MONETARY!{c}40+SUMIF(B2_DEMAND!$H$30:$BK$30;{c}$18;B2_DEMAND!$H$55:$BK$55)/4)"
+def ind_lvl(c):
+    """Level of the bottom-up manufacturing index in year column c (2025 = 1): blocks weighted at 2025 shares.
+
+    A level sum keeps a collapsed block's weight small; averaging growth rates with fixed weights let a metallurgy
+    rebound from 10 to 39 (+265%) add 18 points to the index although its level stays below 2025."""
+    yrs = "EFG"[:"DEFG".index(c)]
+    lv = lambda code: "*".join([f"(1+{y}{R[code]}/100)" for y in yrs]) or "1"
+    return (f"{M('GVA_C_W','MET')}*{c}$16/$D$16+{M('GVA_C_W','FOOD')}*{lv('C_FOOD')}"
+            f"+{M('GVA_C_W','MACH')}*{lv('C_MACH')}+{M('GVA_C_W','OTH')}*{lv('C_OTH')}")
+
+
 cb = [["6. Переработка по блокам: снизу вверх, сверка с уравнением сверху"],
       ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
       ["C_MET", "Металлургия: выпуск", "изменение загрузки мощностей (строка 16), % г/г", h25("MET")] +
@@ -280,12 +296,16 @@ cb = [["6. Переработка по блокам: снизу вверх, св
       ["C_MACH", "Машиностроение с ОПК", f"доля ОПК {mv('GVA_C_MACH','OPK_SH')} (оценка) × ОПК + остальное × гражданское", ""] +
       [f"={M('GVA_C_MACH','OPK_SH')}*{c}{R['C_OPK']}+(1-{M('GVA_C_MACH','OPK_SH')})*{c}{R['C_MACH_CIV']}" for c in "EFG"] +
       ["ОПК в индексе Госстата не виден: доля — допущение, можно поставить 0 в COEFS"],
-      ["C_OTH", "Другое: химия, кокс, пластмассы", f"{mv('GVA_C_OTH','const')} + {mv('GVA_C_OTH','HH')} × рост потребления домохозяйств (B2)", h25("OTH")] +
-      [f"={M('GVA_C_OTH','const')}+{M('GVA_C_OTH','HH')}*B2_DEMAND!{c}$20" for c in "EFG"] + [""],
+      ["C_OTH", "Другое: химия, кокс, пластмассы", f"{mv('GVA_C_OTH','const')} + {mv('GVA_C_OTH','HH')} × рост потребления домохозяйств (B2)"
+       " + доля химии и НПЗ × изменение их доступной мощности (B8_CAPACITY раздел 3)", h25("OTH")] +
+      [f"={M('GVA_C_OTH','const')}+{M('GVA_C_OTH','HH')}*B2_DEMAND!{c}$20"
+       f"+COEFS!$E${REC.CR['REC_CHEM_SH']}*(B8_CAPACITY!{B8Y[c]}{RL.ACT['CHEM']}/B8_CAPACITY!{B8Y[p]}{RL.ACT['CHEM']}-1)*100"
+       for c, p in zip("EFG", "DEF")] + [""],
       ["IND_C_BU", "Индекс переработки снизу вверх", "веса: " + ", ".join(f"{n} {mv('GVA_C_W', k)}" for k, n in
        [("FOOD", "пищепром"), ("MET", "металлургия"), ("MACH", "машиностроение"), ("OTH", "другое")]), h25("IND_C")] +
-      [f"={M('GVA_C_W','MET')}*{c}{R['C_MET']}+{M('GVA_C_W','FOOD')}*{c}{R['C_FOOD']}+{M('GVA_C_W','MACH')}*{c}{R['C_MACH']}"
-       f"+{M('GVA_C_W','OTH')}*{c}{R['C_OTH']}" for c in "EFG"] + ["веса — структура индекса Госстата 2023–2025"],
+      [f"=({ind_lvl(c)})/({ind_lvl(pc[c])})*100-100" for c in "EFG"] +
+      ["веса — структура индекса Госстата 2023–2025, в ценах 2025: индекс = сумма уровней блоков, а не средний рост, "
+       "иначе блок, упавший в разы (металлургия), отскоком весит как в 2025"],
       ["GVA_C_BU", "ВДС переработки снизу вверх", f"{mv('GVA_C_LINK','const')} + {mv('GVA_C_LINK','IND_C')} × индекс + {kv('C','CAP')} × рост мощности энергосистемы",
        round(float(g.loc["2025", "C"]), 1)] +
       [f"={M('GVA_C_LINK','const')}+{M('GVA_C_LINK','IND_C')}*{c}{R['IND_C_BU']}+{C('C','CAP')}*({c}$13/{pc[c]}$13-1)*100" for c in "EFG"] +
@@ -413,7 +433,7 @@ qd_def = [
     ("MET_DY", "Металлургия: изменение за год", "п. от 2025", "fq", lambda q: "=" + yr(QCOL[q], 16, "{cur}-{prv}")),
     ("CORR_B", "Поправка квартала: добыча", "п.п. к годовому росту",  "fq", lambda q, c=None: (lambda c:
         f"={C('B','PORTS')}*({c}{d['PORTS_G']}-{c}{d['PORTS_GY']})+{C('B','CAP')}*({c}{d['CAP_G']}-{c}{d['CAP_GY']})"
-        f"+COEFS!$E${SHOCK_ROW['MET_B']}*({c}{d['MET_D']}-{c}{d['MET_DY']})")(QCOL[q])),
+        f"+COEFS!$E${SHOCK_ROW['MET_B']}*(B8_CAPACITY!{SQ[q]}{RL.ACT['ORE_D']}-B8_CAPACITY!{SQ[q]}{RL.ACT['ORE_DY']})")(QCOL[q])),
     ("CORR_C", "Поправка квартала: переработка", "п.п.", "fq", lambda q: (lambda c:
         f"={M('GVA_C_LINK','IND_C')}*{M('GVA_C_W','MET')}*({c}{d['MET_G']}-{c}{d['MET_GY']})"
         f"+{C('C','CAP')}*({c}{d['CAP_G']}-{c}{d['CAP_GY']})")(QCOL[q])),
