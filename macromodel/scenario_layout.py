@@ -8,7 +8,8 @@ Columns: annual blocks C:K by scenario (C:E Base, F:H Pessimistic, I:K Optimisti
 quarterly blocks C:L = 2026Q3..2028Q4 (the main block: C = first half 2026, D:M = 2026Q3..2028Q4).
 
 The strike intensity on energy (old row 17 and its quarterly rows) was removed on 2026-10-29 at Andrey's request:
-hard to interpret and to estimate; the energy war is in the available capacity (row 17, GW).
+hard to interpret and to estimate; the energy war is in the available capacity (row 17, GW). The same day the unused
+annual rows of minimum wage, military and civil budget pay went too (the quarterly labour block holds them).
 """
 
 # ---- top: active scenario C3, last fact quarter C4, scenario names A8:A10 ----
@@ -19,36 +20,36 @@ ANNUAL_FIRST, ANNUAL_LAST = 16, 32
 
 # ---- annual blocks (formulas over the quarterly inputs below) ----
 BRENT = 36  # Brent: 2026 the fourth quarter, later the average of the year (header 35)
-WAGES = 38  # title; 41 minimum wage, 42 military pay, 43 civil budget pay, 44 de-shadowing
-DESHADOW = 44
-SHOCKS_Y = 46  # title "Отраслевые шоки по годам"
-MET_Y = 49  # metallurgy, average of the year (after the recovery limits of B8_CAPACITY)
-PEACE = 51  # title; 54 peace effect in consumption, 55 in investment
-PEACE_C, PEACE_I = 54, 55
-RECON_FIRST = 59  # title; 62 money for reconstruction
-RECON = 62
-AGRO_FIRST = 65  # title; 68 sunflower oil, 69 weather, 70 sown area
-SUNOIL, WEATHER, AREA = 68, 69, 70
-EDU = 76  # education and health pay fund (title 73)
-EURUSD = 81  # EUR/USD (title 78)
-DESTROYED = 84  # title; 86 metallurgy, 87 ports, 88 chemistry and refinery, 89 chemistry from quarter
+WAGES = 38  # title; 41 de-shadowing (annual minimum wage and budget pay rows removed 2026-10-29: inputs are quarterly)
+DESHADOW = 41
+SHOCKS_Y = 43  # title "Отраслевые шоки по годам"
+MET_Y = 46  # metallurgy, average of the year (after the recovery limits of B8_CAPACITY)
+PEACE = 48  # title; 51 peace effect in consumption, 52 in investment
+PEACE_C, PEACE_I = 51, 52
+RECON_FIRST = 56  # title; 59 money for reconstruction
+RECON = 59
+AGRO_FIRST = 62  # title; 65 sunflower oil, 66 weather, 67 sown area
+SUNOIL, WEATHER, AREA = 65, 66, 67
+EDU = 73  # education and health pay fund (title 70)
+EURUSD = 78  # EUR/USD (title 75)
+DESTROYED = 81  # title; 83 metallurgy, 84 ports, 85 chemistry and refinery, 86 chemistry from quarter
 
 # ---- quarterly inputs ----
-Q_MAIN = 91  # title of the main quarterly block; parameters from row 94, four rows each (metallurgy seven)
-EXTRA_FIN = 186  # extra financing partners are ready to give: Base row (title 185), Pess, Opt, active 189
-Q_FIN = 191  # title "Квартальная разбивка"; quarter header 193
-Q_HEAD = 193
-FIN_Q = 195  # external financing Base / Pess / Opt 195-197, active 198
-FIN_ACT = 198
-NBU_Q = 200  # title; 201 real GDP, 202 CPI, 203 UAH/USD, 204 NBU rate
-GDP_Q, CPI_Q, FX_Q, RATE_Q = 201, 202, 203, 204
-TARIFF = 208  # utility tariff hikes by quarter (title 206)
-FUEL_HEAD = 211
-FUEL_QQ = 212  # input: fuel prices q/q
-FUEL_LAG = 213  # the same quarter a year ago, q/q
-FUEL = 214  # result y/y, read by B3_PRICES row 45
-FUEL_QQ_RES = 215  # result q/q (input or the B3 equation)
-LABOUR = 218  # title of the quarterly labour block (B4_LABOUR); parameters from row 220
+Q_MAIN = 88  # title of the main quarterly block; parameters from row 91, four rows each (metallurgy seven)
+EXTRA_FIN = 183  # extra financing partners are ready to give: Base row (title 182), Pess, Opt, active 186
+Q_FIN = 188  # title "Квартальная разбивка"; quarter header 190
+Q_HEAD = 190
+FIN_Q = 192  # external financing Base / Pess / Opt 192-194, active 195
+FIN_ACT = 195
+NBU_Q = 197  # title; 198 real GDP, 199 CPI, 200 UAH/USD, 201 NBU rate
+GDP_Q, CPI_Q, FX_Q, RATE_Q = 198, 199, 200, 201
+TARIFF = 205  # utility tariff hikes by quarter (title 203)
+FUEL_HEAD = 208
+FUEL_QQ = 209  # input: fuel prices q/q
+FUEL_LAG = 210  # the same quarter a year ago, q/q
+FUEL = 211  # result y/y, read by B3_PRICES row 45
+FUEL_QQ_RES = 212  # result q/q (input or the B3 equation)
+LABOUR = 215  # title of the quarterly labour block (B4_LABOUR); parameters from row 217
 
 # ---- bottom: limits and logic checks ----
-LIMITS = 258  # title; limits table 261-270, logic checks from 274
+LIMITS = 255  # title; limits table 258-267, logic checks from 271
