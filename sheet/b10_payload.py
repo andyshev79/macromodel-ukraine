@@ -23,25 +23,9 @@ out[f"COEFS!A{COEF_FIRST}:L{COEF_FIRST + len(rows) - 1}"] = [
     [r["code"], "B10", r["eq"], r["var"], float(r["coef"]), "", "", "", r["method"], "", "2026-10-25", r["note"]] for r in rows]
 
 # SCENARIOS: sunflower oil price, weather and sown area (base / pessimistic / optimistic), active columns L:N
-SC_FIRST = SL.AGRO_FIRST
-SUN, WEA, AREA = SC_FIRST + 3, SC_FIRST + 4, SC_FIRST + 5
+SUN, WEA, AREA = SL.SUNOIL, SL.WEATHER, SL.AREA  # SCENARIOS annual table, active columns L:N
 act = lambda r: [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a}{r};{b}{r};{c_}{r})" for a, b, c_ in ["CFI", "DGJ", "EHK"]]
-out[f"SCENARIOS!A{SC_FIRST}:O{SC_FIRST + 6}"] = [
-    ["Агро (B10_AGRO)"],
-    ["Параметр", "Единицы", "База", "", "", "Пессимистичный", "", "", "Оптимистичный", "", "", "Активный"],
-    ["", "", 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028],
-    ["Цена подсолнечного масла FOB Чёрное море", "USD/т", 1340, 1250, 1200, 1340, 1200, 1150, 1340, 1300, 1250] + act(SUN) +
-    ["2026 — факт январь–май (MacroStat AGROTrends); дальше оценка Claude: цены 2025–26 высокие из-за слабых урожаев, "
-     "ожидается нормализация"],
-    ["Погода: отклонение урожайности от среднего", "%", 0, 0, 0, 0, -5, -5, 0, 0, 2] + act(WEA) +
-    ["2026 не используется (урожай убран). Оценка Claude; разброс по истории 2016–2021 — ±"
-     f"{num(h['sigma'])}% (COEFS A_SIGMA)"],
-    ["Посевная площадь к 2026 (разминирование, возврат полей)", "%", 0, 0, 2, 0, -2, -3, 0, 3, 6] + act(AREA) +
-    ["Оценка Claude: при мире разминирование возвращает поля, при затяжной войне площадь сокращается. "
-     "Отдельно от сдвига пшеница → яровые (COEFS A_SHIFT_*)"],
-    ["Как считается: урожай культуры 2027–28 = средний урожай 2023–2026 × (1 + площадь) × (1 + погода) × сдвиг структуры; "
-     f"строка {SL.Y['HARVEST']} показывает итог B10_AGRO, вводить его не нужно."],
-]
+# the annual SCENARIOS rows are typed in the annual table since 2026-10-29 (labels: scenarios_quarterly_payload)
 
 g0 = h["grain_my"] + 0  # 2025 marketing-year values, numbers
 text = [

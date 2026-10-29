@@ -32,20 +32,9 @@ out[f"COEFS!A{COEF_FIRST}:L{COEF_FIRST + len(rows) - 1}"] = [
      "" if r["r2"] is None else float(r["r2"]), "2026-10-26", r["note"]] for r in rows]
 
 # SCENARIOS: financing of reconstruction, bn USD (base / pessimistic / optimistic), active columns L:N
-SC_FIRST = SL.RECON_FIRST
-FIN_ROW = SC_FIRST + 3
+FIN_ROW = SL.RECON  # SCENARIOS annual table, active columns L:N
 fin = [2, 6, 8, 2, 2, 5, 3, 8, 10]
-out[f"SCENARIOS!A{SC_FIRST}:O{SC_FIRST + 4}"] = [
-    ["Финансирование восстановления (B9_CONSTRUCTION)"],
-    ["Параметр", "Единицы", "База", "", "", "Пессимистичный", "", "", "Оптимистичный", "", "", "Активный"],
-    ["", "", 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028],
-    ["Деньги на восстановление: партнёры, фонды, страхование рисков", "млрд USD в год"] + fin +
-    [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a}{FIN_ROW};{b}{FIN_ROW};{c}{FIN_ROW})" for a, b, c in ["CFI", "DGJ", "EHK"]] +
-    ["Оценка Claude: Ukraine Facility (инвестиционная часть), ЕБРР, ЕИБ, Всемирный банк, частные проекты под страхование. "
-     "Потребность по RDNA4 около 50 млрд USD в год"],
-    [f"Как считается: B9 сравнивает эти деньги с объёмом восстановления в сценарии (SCENARIOS строка {SL.PEACE_I} × ВНОК прошлого года). "
-     "Если денег меньше — ВНИМАНИЕ: восстановление в сценарии не обеспечено финансированием."],
-]
+# the annual SCENARIOS rows are typed in the annual table since 2026-10-29 (labels: scenarios_quarterly_payload)
 
 text = [
     ["9. Строительство"],

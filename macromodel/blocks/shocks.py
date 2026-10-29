@@ -30,7 +30,7 @@ SHOCKS = {
 SHOCK_ROW = {k: COEF_FIRST + i for i, k in enumerate(SHOCKS)}
 
 
-FUEL_ROW = SL.FUEL  # SCENARIOS: fuel prices y/y by quarter (result; the input is q/q in SL.FUEL_QQ)
+# fuel: SCENARIOS holds only the q/q input (SL.FUEL_QQ); its y/y is B3_PRICES section 6 (since 2026-10-29)
 # CPI "fuels and lubricants", % to the previous quarter (end of quarter): product of the three monthly indices,
 # MacroStat sheet CPI (Gosstat), read 2026-10-29. The y/y of these months equals the NBU fuel block (46.2 in 2026Q3).
 FUEL_QOQ = {"2025Q3": 3.7, "2025Q4": 1.6, "2026Q1": 18.6, "2026Q2": 6.8, "2026Q3": 13.6}

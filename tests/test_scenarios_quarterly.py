@@ -9,18 +9,20 @@ def test_rows_do_not_overlap_and_start_after_the_header():
     rows = sorted(ROW.values())
     assert rows[0] == SL.Q_MAIN + 3 and LAST_ROW < SL.EXTRA_FIN - 1
     by_row = {v: k for k, v in ROW.items()}
-    # four rows per parameter; an index input adds three rows above the levels of the next one
-    assert all(b - a == 4 + (3 if by_row[b] in INDEX_IN else 0) for a, b in zip(rows, rows[1:]))
+    # four rows per parameter (Base, Pess, Opt, active); the metallurgy index has no level rows since 2026-10-29
+    assert all(b - a == 4 for a, b in zip(rows, rows[1:])) and INDEX_IN == {"MET"}
 
 
-def test_metallurgy_levels_chain_the_quarterly_index():
+def test_metallurgy_index_is_chained_in_b8():
+    """Andrey, 29.10: the level rows went from SCENARIOS; B8_CAPACITY builds the level from the index."""
+    import json, os, subprocess
     from sheet.scenarios_quarterly_payload import FIRST
     rows = build()[f"SCENARIOS!A{FIRST}:O{max(ROW.values()) + 3}"]
     r = ROW["MET"]
-    lvl = rows[r - FIRST]
-    assert lvl[2] == 100 and lvl[3] == f"=C{r}*(1+D{r - 3}/100)" and lvl[12] == f"=L{r}*(1+M{r - 3}/100)"
-    assert "кв/кв" in rows[r - 3 - FIRST][1] and rows[r + 3 - FIRST][3] == f"=B8_CAPACITY!D{RL.ACT['MET']}"
-
+    assert "кв/кв" in rows[r - FIRST][1] and rows[r + 3 - FIRST][3] == f"=B8_CAPACITY!D{RL.ACT['MET']}"
+    out = json.loads(subprocess.check_output(["python", "sheet/recovery_payload.py"], env=dict(os.environ, PYTHONPATH=".")))
+    met_in = next(v[0] for v in out.values() if v and v[0] and v[0][0] == "MET_IN_0")
+    assert met_in[2] == 100 and met_in[3].endswith(f"*(1+SCENARIOS!D{r}/100)")
 
 def test_annual_cells_are_formulas_over_their_quarters():
     out = build()

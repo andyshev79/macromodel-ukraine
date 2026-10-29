@@ -90,7 +90,7 @@ checks.append(["L_HARV", "Урожай не выше предела подкон
                f"\"ВНИМАНИЕ: урожай до \"&ROUND(MAX(B10_AGRO!$I$25*(1+{c[1]}{A}:{c[2]}{A}/100)*(1+{c[1]}{W}:{c[2]}{W}/100));1)&\" млн т\"))"
                for s, c in SCEN.items()])
 # military headcount, quarterly labour rows (C:L), Base / Pess / Opt
-MIL = [SL.LABOUR + 30 + k for k in range(3)]  # military headcount, B4_LABOUR block
+MIL = [SL.LAB["MILN"] + k for k in range(3)]  # military headcount by scenario, B4_LABOUR block
 checks.append(["L_MIL", "Численность военных не выше предела", f"строки {MIL[0]}–{MIL[2]} ≤ D{L['LIM_MIL']}"] +
               [f"=IF(MAX(C{r}:L{r})<={lim('LIM_MIL')};\"OK\";\"ВНИМАНИЕ: до \"&MAX(C{r}:L{r})&\" тыс.\")" for r in MIL])
 # indices and shares within 0..1

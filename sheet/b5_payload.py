@@ -334,14 +334,7 @@ out[f"B5_EXTERNAL!A43:T{R['NOTE7']}"] = sec
 
 # EUR/USD by scenario (SCENARIOS rows EUR_SC - 3 .. EUR_SC): written only without --coefs
 EUR = {"Base": [1.15, 1.15, 1.15], "Pess": [1.15, 1.10, 1.08], "Opt": [1.15, 1.18, 1.20]}
-out[f"SCENARIOS!A{EUR_SC - 3}:O{EUR_SC}"] = [
-    ["Курс EUR/USD (B5_EXTERNAL раздел 4)"],
-    ["Параметр", "Единицы", "База", "", "", "Пессимистичный", "", "", "Оптимистичный", "", "", "Активный", "", "", "Источник"],
-    ["", "", 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028],
-    ["EUR/USD, средний за год", "долларов за 1 евро"] + EUR["Base"] + EUR["Pess"] + EUR["Opt"] +
-    [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a}{EUR_SC};{b}{EUR_SC};{d}{EUR_SC})" for a, b, d in zip("CDE", "FGH", "IJK")] +
-    ["2026 — для 4 кв. (3 кв. факт 1,149). Оценка Claude: пессимистичный — доллар крепнет (бегство от риска), "
-     "оптимистичный — евро растёт с восстановлением Европы"]]
+# the annual SCENARIOS rows are typed in the annual table since 2026-10-29 (labels: scenarios_quarterly_payload)
 
 # ANCHORS forecast links (columns BB:BK = B5 J:S)
 fq = {q: QC[i] for i, q in enumerate(QS)}

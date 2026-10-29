@@ -73,8 +73,12 @@ def scenario_block(s: int) -> dict:
                          f"=MIN(IFERROR(INDEX($C{r['IN']}:$M{r['IN']};{first});$C{r['IN']});IFERROR(INDEX($D{r['IN']}:$M{r['IN']};{first});$C{r['IN']}))",
                          f"=MAXIFS($D{r['IN']}:$M{r['IN']};$D{k}:$M{k};\">0\")",
                          f"=SCENARIOS!${'CDE'[s]}${SROW[ind]}"]
-        out[r["IN"]] = [f"{ind}_IN_{s}", f"{name}: путь сценария (верхняя граница)"] + \
-                       [f"=SCENARIOS!{c}{SQ_ROW[ind] + s}" for c in ALLC]
+        if ind == "MET":  # input is the index to the previous quarter (SCENARIOS); the level is built here, 1st half 2026 = 100
+            out[r["IN"]] = [f"{ind}_IN_{s}", f"{name}: путь сценария из индекса (верхняя граница)", 100] + \
+                           [f"={ALLC[i]}{r['IN']}*(1+SCENARIOS!{c}{SQ_ROW[ind] + s}/100)" for i, c in enumerate(QC)]
+        else:
+            out[r["IN"]] = [f"{ind}_IN_{s}", f"{name}: путь сценария (верхняя граница)"] + \
+                           [f"=SCENARIOS!{c}{SQ_ROW[ind] + s}" for c in ALLC]
         out[r["BOUND"]] = [f"{ind}_BOUND_{s}", f"{name}: предел по разрушениям", ""] + \
                           [f"={FULL[ind]}*(1-$G{r['PAR']}/100*{unbuilt(c, k)})" for c in QC]
         out[r["CEIL"]] = [f"{ind}_CEIL_{s}", f"{name}: предел по рынкам (возврат от уровня войны к цели)", ""] + \
@@ -94,7 +98,7 @@ def scenario_block(s: int) -> dict:
 def build() -> dict:
     out = {}
     rows = {R0: ["3. Восстановление после простоя и разрушений, по кварталам"],
-            R0 + 1: [f"Как читать: путь SCENARIOS (строки {SQ_ROW['PORTS']}–{SQ_ROW['PORTS'] + 3} порты, {SQ_ROW['MET']}–{SQ_ROW['MET'] + 3} металлургия, из индекса к прошлому кварталу) — верхняя граница. После прекращения "
+            R0 + 1: [f"Как читать: путь SCENARIOS (строки {SQ_ROW['PORTS']}–{SQ_ROW['PORTS'] + 3} порты, {SQ_ROW['MET']}–{SQ_ROW['MET'] + 2} металлургия: индекс к прошлому кварталу, уровень считается здесь) — верхняя граница. После прекращения "
                      "огня в модель идёт наименьшее из трёх: путь сценария; возврат рынков — от уровня войны к цели за T кварталов, "
                      "T растёт с длиной простоя (COEFS REC_); отстройка разрушенного — начинается через R0 кварталов и идёт R1 "
                      f"кварталов (SCENARIOS строки {SROW['MET']}–{SROW['CHEM_Q']}). Руда: после прекращения огня часть руды, которую не берут свои заводы, "
