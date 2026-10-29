@@ -10,6 +10,8 @@ quarterly blocks C:L = 2026Q3..2028Q4 (the main block: C = first half 2026, D:M 
 The strike intensity on energy (old row 17 and its quarterly rows) was removed on 2026-10-29 at Andrey's request:
 hard to interpret and to estimate; the energy war is in the available capacity (row 17, GW). The same day the unused
 annual rows of minimum wage, military and civil budget pay went too (the quarterly labour block holds them).
+The annual Brent block (old rows 35-36) was removed the same day: B3_PRICES reads the quarterly Brent rows directly;
+two blank rows were added above the quarterly block, so rows from 88 down did not move.
 """
 
 # ---- top: active scenario C3, last fact quarter C4, scenario names A8:A10 ----
@@ -19,20 +21,19 @@ Y = {"CEASEFIRE": 16, "CAP": 17, "PORTS": 18, "FIN": 19, "DEF": 20, "MIGR": 21, 
 ANNUAL_FIRST, ANNUAL_LAST = 16, 32
 
 # ---- annual blocks (formulas over the quarterly inputs below) ----
-BRENT = 36  # Brent: 2026 the fourth quarter, later the average of the year (header 35)
-WAGES = 38  # title; 41 de-shadowing (annual minimum wage and budget pay rows removed 2026-10-29: inputs are quarterly)
-DESHADOW = 41
-SHOCKS_Y = 43  # title "Отраслевые шоки по годам"
-MET_Y = 46  # metallurgy, average of the year (after the recovery limits of B8_CAPACITY)
-PEACE = 48  # title; 51 peace effect in consumption, 52 in investment
-PEACE_C, PEACE_I = 51, 52
-RECON_FIRST = 56  # title; 59 money for reconstruction
-RECON = 59
-AGRO_FIRST = 62  # title; 65 sunflower oil, 66 weather, 67 sown area
-SUNOIL, WEATHER, AREA = 65, 66, 67
-EDU = 73  # education and health pay fund (title 70)
-EURUSD = 78  # EUR/USD (title 75)
-DESTROYED = 81  # title; 83 metallurgy, 84 ports, 85 chemistry and refinery, 86 chemistry from quarter
+WAGES = 36  # title; 39 de-shadowing (annual minimum wage and budget pay rows removed 2026-10-29: inputs are quarterly)
+DESHADOW = 39
+SHOCKS_Y = 41  # title "Отраслевые шоки по годам"
+MET_Y = 44  # metallurgy, average of the year (after the recovery limits of B8_CAPACITY)
+PEACE = 46  # title; 49 peace effect in consumption, 50 in investment
+PEACE_C, PEACE_I = 49, 50
+RECON_FIRST = 54  # title; 57 money for reconstruction
+RECON = 57
+AGRO_FIRST = 60  # title; 63 sunflower oil, 64 weather, 65 sown area
+SUNOIL, WEATHER, AREA = 63, 64, 65
+EDU = 71  # education and health pay fund (title 68)
+EURUSD = 76  # EUR/USD (title 73)
+DESTROYED = 79  # title; 81 metallurgy, 82 ports, 83 chemistry and refinery, 84 chemistry from quarter
 
 # ---- quarterly inputs ----
 Q_MAIN = 88  # title of the main quarterly block; parameters from row 91, four rows each (metallurgy seven)

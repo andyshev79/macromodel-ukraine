@@ -59,7 +59,7 @@ PARAMS = [
      "Не вводить: прошлый квартал × (1 + индекс / 100). 1 пол. 2026 — факт: промпроизводство 24–25 на уровне 2025 "
      "(−2,4% и +4,9% г/г). Это верхняя граница пути; после прекращения огня B8_CAPACITY ограничивает её рынками и разрушениями"),
     ("DESHADOW", SL.DESHADOW, "Детенизация зарплат", "п.п. к росту средней зарплаты", "year", "year", "Только годовая оценка"),
-    ("BRENT", SL.BRENT, "Цена нефти Brent", "USD/барр.", "q4", "flat", "2026 в годовой таблице — 4 кв. (как раньше)"),
+    ("BRENT", None, "Цена нефти Brent", "USD/барр.", "none", "flat", "Годовой строки нет: B3_PRICES строка 42 берёт квартал из активной строки"),
     ("PEACE_C", SL.PEACE_C, "Эффект мира: снижение нормы сбережений", "п.п. к росту потребления домохозяйств", "year", "year",
      "Годовая добавка в B2_DEMAND"),
     ("PEACE_I", SL.PEACE_I, "Эффект мира: восстановление", "п.п. к росту инвестиций (ВНОК)", "year", "year", "Годовая добавка в B2_DEMAND"),
@@ -98,7 +98,7 @@ QOVR = {
             2: {"2026Q3": 68.3, "2026Q4": 5}},
 }
 AGG_TEXT = {"avg": "среднее кварталов; 2026 = (2 × 1 пол. + 3 кв. + 4 кв.) / 4", "end": "4 кв.",
-            "q4": "2026 — 4 кв., дальше среднее кварталов", "year": "одно значение на год"}
+            "q4": "2026 — 4 кв., дальше среднее кварталов", "year": "одно значение на год", "none": "годовой строки нет"}
 
 # quarterly rows that already exist (columns C:L = 2026Q3..2028Q4): annual row -> (first scenario row, aggregation)
 OLD_Q = {SL.Y["FIN"]: (SL.FIN_Q, "fin"), SL.Y["MIGR"]: (SL.LABOUR + 14, "flow"), SL.Y["MOB"]: (SL.LABOUR + 18, "flow"),
@@ -132,7 +132,7 @@ def build() -> dict:
     out = {}
     rows = [["Сценарные допущения по кварталам — основной ввод (с 28.10.2026)"],
             [f"Вводите значения здесь, по кварталам. Годовая таблица вверху (строки 16–32) и годовые блоки под ней "
-             f"(строки {SL.BRENT - 1}–{SL.DESTROYED + 5}) считаются из этих кварталов и меняются сами. Где есть только годовые данные, ячейки года объединены: одно значение на год. "
+             f"(строки {SL.WAGES}–{SL.DESTROYED + 5}) считаются из этих кварталов и меняются сами. Где есть только годовые данные, ячейки года объединены: одно значение на год. "
              "Столбец C — первое полугодие 2026 (факт, где он известен). Финансирование и потоки людей вводятся в своих "
              f"квартальных строках ({SL.FIN_Q}–{SL.FIN_Q + 2}, {SL.LABOUR + 14}–{SL.LABOUR + 25})."],
             ["Параметр", "Единицы", "1 пол. 2026"] + QLAB + ["Как считается год", "Комментарий"]]
@@ -163,6 +163,8 @@ def build() -> dict:
     # the annual table: formulas over the quarters
     for code, ar, *_rest in PARAMS:
         agg, r = _rest[2], ROW[code]
+        if ar is None:  # no annual row (Brent): the quarterly rows are read directly
+            continue
         if code in RL.EFF_ROWS:  # metallurgy and ports: the path after the recovery limits (B8_CAPACITY section 3)
             out[f"SCENARIOS!C{ar}:K{ar}"] = [[annual_formula(agg, e, y, "B8_CAPACITY!") for e in RL.EFF_ROWS[code] for y in YEARS]]
             continue
@@ -211,6 +213,8 @@ def inputs(snap: dict) -> dict:
     out = {}
     for code, ar, name, unit, agg, rule, note in PARAMS:
         r = ROW[code]
+        if ar is None:
+            continue
         vals = []
         for k in range(3):
             a = ann[ar][3 * k: 3 * k + 3]
@@ -250,7 +254,7 @@ def inputs(snap: dict) -> dict:
     return out
 
 
-PROTECTED = {p[1] for p in PARAMS} | set(OLD_Q)  # annual rows whose C:K are formulas over the quarters
+PROTECTED = {p[1] for p in PARAMS if p[1]} | set(OLD_Q)  # annual rows whose C:K are formulas over the quarters
 
 
 def protect(out: dict) -> dict:
