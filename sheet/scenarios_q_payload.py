@@ -1,10 +1,10 @@
 """Optional quarterly detail in SCENARIOS and its links to B5, ANCHORS and the annual inputs.
 
 Scenarios stay annual. A few inputs can be given by quarter:
-- external financing tranches and energy strike intensity, per scenario;
+- external financing tranches, per scenario (strike intensity on energy removed 2026-10-29);
 - near-term quarters from fresh data and NBU estimates (GDP, CPI, FX, NBU rate), for all scenarios.
 An empty quarter keeps the annual logic: the annual amount is split over the empty quarters
-(financing) or the annual value is used (strikes, near-term rows).
+(financing) or the annual value is used (near-term rows).
 
 Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 Quarter columns C:L of SCENARIOS are 2026Q3..2028Q4, the same order as ANCHORS BB:BK.
@@ -17,8 +17,8 @@ from macromodel import scenario_layout as SL
 QUARTERS = [f"{y}Q{q}" for y in (2026, 2027, 2028) for q in (1, 2, 3, 4)][2:]
 QCOLS = "CDEFGHIJKL"
 HEAD = SL.Q_HEAD
-F, S = SL.FIN_Q, SL.STRIKES_Q
-R = {"FIN": (F, F + 1, F + 2), "STRIKES": (S, S + 1, S + 2), "FIN_ACT": S + 3, "STRIKES_ACT": S + 4,
+F = SL.FIN_Q
+R = {"FIN": (F, F + 1, F + 2), "FIN_ACT": SL.FIN_ACT,
      "GDP": SL.GDP_Q, "CPI": SL.CPI_Q, "FX": SL.FX_Q, "RATE": SL.RATE_Q}
 YEAR_COLS = {2026: ("C", "D"), 2027: ("E", "H"), 2028: ("I", "L")}  # first and last quarter column per year
 ANNUAL_COL = {2026: "L", 2027: "M", 2028: "N"}
@@ -29,17 +29,13 @@ choose = lambda c, rows: (f"=IFERROR(IF(CHOOSE(MATCH($C$3;$A$8:$A$10;0);{c}{rows
 rows = [
     ["Квартальная разбивка (необязательно)"],
     ["Пустая ячейка — модель считает как раньше: финансирование года делится поровну между пустыми кварталами, остальные строки берутся из годовых значений и уравнений. "
-     "Если заполнены все кварталы года, финансирование года = их сумма. Удары: годовое значение = среднее кварталов (пустые = годовое)."],
+     "Если заполнены все кварталы года, финансирование года = их сумма."],
     ["Параметр", "Единицы"] + QUARTERS,
     ["Сценарные допущения по кварталам"],
     ["Внешнее финансирование бюджета — База", "млн USD"] + blank,
     ["Внешнее финансирование бюджета — Пессимистичный", "млн USD"] + blank,
     ["Внешнее финансирование бюджета — Оптимистичный", "млн USD"] + blank,
-    ["Интенсивность ударов по энергетике — База", "индекс 0–1"] + blank,
-    ["Интенсивность ударов по энергетике — Пессимистичный", "индекс 0–1"] + blank,
-    ["Интенсивность ударов по энергетике — Оптимистичный", "индекс 0–1"] + blank,
     ["Внешнее финансирование — активный сценарий", "млн USD"] + [choose(c, R["FIN"]) for c in QCOLS],
-    ["Удары по энергетике — активный сценарий", "индекс 0–1"] + [choose(c, R["STRIKES"]) for c in QCOLS],
     [""],
     ["Ближайшие кварталы: свежие данные и оценки НБУ (для всех сценариев)"],
     ["Рост реального ВВП", "% г/г"] + blank,
@@ -49,19 +45,12 @@ rows = [
 ]
 out = {f"SCENARIOS!A{SL.Q_FIN}:L{SL.Q_FIN + len(rows) - 1}": rows}
 
-# annual strike intensity of the active scenario = average of its quarters, empty quarters = annual value
-for y, (c0, c1) in YEAR_COLS.items():
-    a, q = ANNUAL_COL[y], f"{c0}{R['STRIKES_ACT']}:{c1}{R['STRIKES_ACT']}"
-    base = {"L": "C17;F17;I17", "M": "D17;G17;J17", "N": "E17;H17;K17"}[a]
-    out[f"SCENARIOS!{a}17"] = [[f"=IFERROR(LET(v;CHOOSE(MATCH($C$3;$A$8:$A$10;0);{base});n;COUNT({q});"
-                                f"IF(n=0;v;(v*(4-n)+SUM({q}))/4));\"\")"]]
-
 # annual financing: the sum of quarters when all forecast quarters of the year are given
 fa = R["FIN_ACT"]
 out["B5_EXTERNAL!E17:G17"] = [[
-    f"=IF(COUNT(SCENARIOS!C{fa}:D{fa})=2;SUM(ANCHORS!AZ29:BA29)+SUM(SCENARIOS!C{fa}:D{fa});SCENARIOS!L20)",
-    f"=IF(COUNT(SCENARIOS!E{fa}:H{fa})=4;SUM(SCENARIOS!E{fa}:H{fa});SCENARIOS!M20)",
-    f"=IF(COUNT(SCENARIOS!I{fa}:L{fa})=4;SUM(SCENARIOS!I{fa}:L{fa});SCENARIOS!N20)"]]
+    f"=IF(COUNT(SCENARIOS!C{fa}:D{fa})=2;SUM(ANCHORS!AZ29:BA29)+SUM(SCENARIOS!C{fa}:D{fa});SCENARIOS!L{SL.Y['FIN']})",
+    f"=IF(COUNT(SCENARIOS!E{fa}:H{fa})=4;SUM(SCENARIOS!E{fa}:H{fa});SCENARIOS!M{SL.Y['FIN']})",
+    f"=IF(COUNT(SCENARIOS!I{fa}:L{fa})=4;SUM(SCENARIOS!I{fa}:L{fa});SCENARIOS!N{SL.Y['FIN']})"]]
 
 ov = lambda col, r: f"INDEX(SCENARIOS!$C${r}:$L${r};MATCH({col}$4;SCENARIOS!$C${HEAD}:$L${HEAD};0))"
 # quarterly financing received: given tranche, else the rest of the year over the empty quarters

@@ -6,44 +6,49 @@ the cells), and every payload takes its SCENARIOS rows from here, so a later mov
 
 Columns: annual blocks C:K by scenario (C:E Base, F:H Pessimistic, I:K Optimistic), L:N active, O source;
 quarterly blocks C:L = 2026Q3..2028Q4 (the main block: C = first half 2026, D:M = 2026Q3..2028Q4).
+
+The strike intensity on energy (old row 17 and its quarterly rows) was removed on 2026-10-29 at Andrey's request:
+hard to interpret and to estimate; the energy war is in the available capacity (row 17, GW).
 """
 
 # ---- top: active scenario C3, last fact quarter C4, scenario names A8:A10 ----
-ANNUAL_FIRST, ANNUAL_LAST = 16, 33  # annual table: 16 ceasefire quarter .. 33 share of foreign workers
+# annual table (rows 16-32): base C:E, pessimistic F:H, optimistic I:K, active L:N
+Y = {"CEASEFIRE": 16, "CAP": 17, "PORTS": 18, "FIN": 19, "DEF": 20, "MIGR": 21, "MOB": 22, "HARVEST": 23, "WHEAT": 24,
+     "STEEL": 25, "TTF": 26, "EA_GDP": 27, "HICP": 28, "FED": 29, "GUEST": 30, "SH_MIGR": 31, "SH_GUEST": 32}
+ANNUAL_FIRST, ANNUAL_LAST = 16, 32
 
 # ---- annual blocks (formulas over the quarterly inputs below) ----
-BRENT = 37  # Brent: 2026 the fourth quarter, later the average of the year (header 36)
-WAGES = 39  # title; 42 minimum wage, 43 military pay, 44 civil budget pay, 45 de-shadowing
-DESHADOW = 45
-SHOCKS_Y = 47  # title "Отраслевые шоки по годам"
-MET_Y = 50  # metallurgy, average of the year (after the recovery limits of B8_CAPACITY)
-PEACE = 52  # title; 55 peace effect in consumption, 56 in investment
-PEACE_C, PEACE_I = 55, 56
-RECON_FIRST = 60  # title; 63 money for reconstruction
-RECON = 63
-AGRO_FIRST = 66  # title; 69 sunflower oil, 70 weather, 71 sown area
-SUNOIL, WEATHER, AREA = 69, 70, 71
-EDU = 77  # education and health pay fund (title 74)
-EURUSD = 82  # EUR/USD (title 79)
-DESTROYED = 85  # title; 87 metallurgy, 88 ports, 89 chemistry and refinery, 90 chemistry from quarter
+BRENT = 36  # Brent: 2026 the fourth quarter, later the average of the year (header 35)
+WAGES = 38  # title; 41 minimum wage, 42 military pay, 43 civil budget pay, 44 de-shadowing
+DESHADOW = 44
+SHOCKS_Y = 46  # title "Отраслевые шоки по годам"
+MET_Y = 49  # metallurgy, average of the year (after the recovery limits of B8_CAPACITY)
+PEACE = 51  # title; 54 peace effect in consumption, 55 in investment
+PEACE_C, PEACE_I = 54, 55
+RECON_FIRST = 59  # title; 62 money for reconstruction
+RECON = 62
+AGRO_FIRST = 65  # title; 68 sunflower oil, 69 weather, 70 sown area
+SUNOIL, WEATHER, AREA = 68, 69, 70
+EDU = 76  # education and health pay fund (title 73)
+EURUSD = 81  # EUR/USD (title 78)
+DESTROYED = 84  # title; 86 metallurgy, 87 ports, 88 chemistry and refinery, 89 chemistry from quarter
 
 # ---- quarterly inputs ----
-Q_MAIN = 92  # title of the main quarterly block; parameters from row 95, four rows each (metallurgy seven)
-EXTRA_FIN = 187  # extra financing partners are ready to give: Base row (title 186), Pess, Opt, active 190
-Q_FIN = 192  # title "Квартальная разбивка"; quarter header 194
-Q_HEAD = 194
-FIN_Q = 196  # external financing Base / Pess / Opt 196-198
-STRIKES_Q = 199  # strikes on energy Base / Pess / Opt 199-201; active financing 202, strikes 203
-NBU_Q = 205  # title; 206 real GDP, 207 CPI, 208 UAH/USD, 209 NBU rate
-GDP_Q, CPI_Q, FX_Q, RATE_Q = 206, 207, 208, 209
-TARIFF = 213  # utility tariff hikes by quarter (title 211)
-FUEL_HEAD = 216
-FUEL_QQ = 217  # input: fuel prices q/q
-FUEL_LAG = 218  # the same quarter a year ago, q/q
-FUEL = 219  # result y/y, read by B3_PRICES row 45
-FUEL_QQ_RES = 220  # result q/q (input or the B3 equation)
-LABOUR = 223  # title of the quarterly labour block (B4_LABOUR); parameters from row 225
+Q_MAIN = 91  # title of the main quarterly block; parameters from row 94, four rows each (metallurgy seven)
+EXTRA_FIN = 186  # extra financing partners are ready to give: Base row (title 185), Pess, Opt, active 189
+Q_FIN = 191  # title "Квартальная разбивка"; quarter header 193
+Q_HEAD = 193
+FIN_Q = 195  # external financing Base / Pess / Opt 195-197, active 198
+FIN_ACT = 198
+NBU_Q = 200  # title; 201 real GDP, 202 CPI, 203 UAH/USD, 204 NBU rate
+GDP_Q, CPI_Q, FX_Q, RATE_Q = 201, 202, 203, 204
+TARIFF = 208  # utility tariff hikes by quarter (title 206)
+FUEL_HEAD = 211
+FUEL_QQ = 212  # input: fuel prices q/q
+FUEL_LAG = 213  # the same quarter a year ago, q/q
+FUEL = 214  # result y/y, read by B3_PRICES row 45
+FUEL_QQ_RES = 215  # result q/q (input or the B3 equation)
+LABOUR = 218  # title of the quarterly labour block (B4_LABOUR); parameters from row 220
 
 # ---- bottom: limits and logic checks ----
-LIMITS = 263  # title; limits table 266-275, logic checks from 279
-
+LIMITS = 258  # title; limits table 261-270, logic checks from 274

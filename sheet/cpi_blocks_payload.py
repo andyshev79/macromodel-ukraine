@@ -54,8 +54,8 @@ def harv(c):
     y = int(q[:4]) if q[-1] in "34" else int(q[:4]) - 1
     if y == 2025:
         return round(float(B.harvest_growth()["2025"]), 1)
-    p = "77,6" if y == 2026 else f"SCENARIOS!{SC_YEAR[str(y - 1)]}24"
-    return f"=(SCENARIOS!{SC_YEAR[str(y)]}24/{p}-1)*100"
+    p = "77,6" if y == 2026 else f"SCENARIOS!{SC_YEAR[str(y - 1)]}{SL.Y['HARVEST']}"
+    return f"=(SCENARIOS!{SC_YEAR[str(y)]}{SL.Y['HARVEST']}/{p}-1)*100"
 
 
 def tariffs(c):

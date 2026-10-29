@@ -7,6 +7,7 @@ import sys
 
 import pandas as pd
 
+from macromodel import scenario_layout as SL
 from macromodel.blocks.fiscal import annual, coef_table
 from macromodel.blocks.real_sector import HIST
 
@@ -42,7 +43,7 @@ rows = [
     ["1. Драйверы"],
     ["Код", "Показатель", "Единицы", 2025, 2026, 2027, 2028, "Откуда"],
     ["GDP_NOM", "Номинальный ВВП", "млрд грн"] + [f"=B3_PRICES!{c}26" for c in "DEFG"] + ["B3_PRICES"],
-    ["DEF_GDP", "Расходы на оборону", "% ВВП", r1(h["BUDGET_DEFENCE"] / h["GDP_NOM"] * 100)] + [f"=SCENARIOS!{s}21" for s in "LMN"] + ["SCENARIOS"],
+    ["DEF_GDP", "Расходы на оборону", "% ВВП", r1(h["BUDGET_DEFENCE"] / h["GDP_NOM"] * 100)] + [f"=SCENARIOS!{s}{SL.Y['DEF']}" for s in "LMN"] + ["SCENARIOS"],
     ["FIN", "Внешнее финансирование бюджета", "млн USD"] + [f"=B5_EXTERNAL!{c}17" for c in "DEFG"] + ["SCENARIOS через B5"],
     ["FX", "Курс UAH/USD, средний", "грн за 1 USD"] + [f"=B5_EXTERNAL!{c}41" for c in "DEFG"] + ["B5_EXTERNAL"],
     ["FX_DEP", "Девальвация гривны", "%"] + [f"=B5_EXTERNAL!{c}40" for c in "DEFG"] + ["B5_EXTERNAL"],

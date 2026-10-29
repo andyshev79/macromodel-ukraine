@@ -109,7 +109,7 @@ def build() -> dict:
     rows[ACT0] = ["Активный сценарий (SCENARIOS C3)"]
     rows[a["K"]] = ["K", "Кварталов после прекращения огня", ""] + [choose(c, [sc_row(s) for s in range(3)]) for c in QC]
     rows[a["MET"]] = act("MET", "Металлургия: загрузка, % от 2025") + [100] + avg(a["MET"]) + [f"идёт в SCENARIOS строки {SL.MET_Y} и {SQ_ROW['MET'] + 3}"]
-    rows[a["PORTS"]] = act("PORTS", "Порты: млн т в год") + ["=B1_REAL!$D$12"] + avg(a["PORTS"]) + [f"идёт в SCENARIOS строки 19 и {SQ_ROW['PORTS'] + 3}"]
+    rows[a["PORTS"]] = act("PORTS", "Порты: млн т в год") + ["=B1_REAL!$D$12"] + avg(a["PORTS"]) + [f"идёт в SCENARIOS строки {SL.Y["PORTS"]} и {SQ_ROW['PORTS'] + 3}"]
     rows[a["CHEM"]] = ["CHEM", "Химия и НПЗ: доступная мощность, % от 2025", choose("C", [chem_row(s) for s in range(3)])] + \
                       [choose(c, [chem_row(s) for s in range(3)]) for c in QC] + [100] + avg(a["CHEM"]) + \
                       ["идёт в B1_REAL: «другое» в переработке"]

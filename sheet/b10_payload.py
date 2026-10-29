@@ -59,11 +59,11 @@ text = [
     ["1. Драйверы"],
     ["Код", "Показатель", "Единицы", int(FACT), int(NOW), 2027, 2028, "Источник"],
     ["PX_WHEAT", "Цена пшеницы FOB Чёрное море", "USD/т", round(h["px"].loc[FACT, "WHEAT"]), round(h["px"].loc[NOW, "WHEAT"])] +
-    [f"={pc[cc]}11*SCENARIOS!{ACT[cc]}25/SCENARIOS!{ACT[pc[cc]]}25" for cc in "FG"] +
+    [f"={pc[cc]}11*SCENARIOS!{ACT[cc]}{SL.Y['WHEAT']}/SCENARIOS!{ACT[pc[cc]]}{SL.Y['WHEAT']}" for cc in "FG"] +
     [f"{FACT}–{NOW} — MacroStat AGROTrends (среднее месяцев с данными); дальше рост по SCENARIOS строка 25"],
     ["PX_SUNOIL", "Цена подсолнечного масла FOB", "USD/т", round(h["px"].loc[FACT, "SUNOIL"]), round(h["px"].loc[NOW, "SUNOIL"])] +
     [f"=SCENARIOS!{ACT[cc]}{SUN}" for cc in "FG"] + [f"SCENARIOS строка {SUN}"],
-    ["PORTS", "Пропускная способность морских портов", "млн т в год", 82.2] + [f"=SCENARIOS!{ACT[cc]}19" for cc in "EFG"] +
+    ["PORTS", "Пропускная способность морских портов", "млн т в год", 82.2] + [f"=SCENARIOS!{ACT[cc]}{SL.Y['PORTS']}" for cc in "EFG"] +
     ["SCENARIOS строка 19"],
     ["WEATHER", "Погода: отклонение урожайности", "%", "", ""] + [f"=SCENARIOS!{ACT[cc]}{WEA}" for cc in "FG"] +
     [f"SCENARIOS строка {WEA}"],
