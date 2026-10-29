@@ -242,7 +242,7 @@ def test_scenario_logic():
     assert t[14][3] == f'=COUNTIF(D{SL.LIMITS + 16}:F{SL.LIMITS + 43};"ВНИМАНИЕ*")' and chk[0][0] == "L_PORTS" and chk[-1][0] == f"O_{SL.AREA}"
     assert not any("STRIKES" in r[0] for r in chk)  # energy strikes removed 2026-10-29
     assert all(str(f).startswith("=") for r in chk for f in r[3:4])
-    assert f"C{SL.LABOUR + 30}:L{SL.LABOUR + 30}" in next(r for r in chk if r[0] == "L_MIL")[3]  # military headcount rows
+    assert f"C{SL.LAB['MILN']}:L{SL.LAB['MILN']}" in next(r for r in chk if r[0] == "L_MIL")[3]  # military headcount rows
     assert f"C{SL.PEACE_C}:E{SL.PEACE_C}" in next(r for r in chk if r[0] == "C_PEACE")[3]  # peace effect rows
 
 
@@ -273,7 +273,7 @@ def test_pub_services():
     assert f"SCENARIOS!M{SL.EDU}" in t[r["PUB_FUND"] - 100][5]
     pp = pub_prices()
     assert 0.5 < pp["coef"]["MINW"] < 1.2 and pp["r2"] > 0.5  # history: the deflator followed the minimum wage
-    assert f"SCENARIOS!A{SL.EDU - 3}:O{SL.EDU}" in p  # pay fund defaults, written only without --coefs
+    assert not any(k.startswith("SCENARIOS") for k in p)  # EDU is typed in the annual table (row SL.EDU) since 2026-10-29
 
 
 def test_b5_quarterly():
@@ -289,8 +289,7 @@ def test_b5_quarterly():
     assert "B5_EXTERNAL!H80:K80" in payload("b6_payload")["B6_FISCAL!A1:H47"][42][4]  # euro revaluation of FX debt
     fit = X.remit_fit()
     assert 0.8 < fit["coef"]["REM_L"] < 1 and fit["r2"] > 0.7
-    eur = f"SCENARIOS!A{SL.EURUSD - 3}:O{SL.EURUSD}"
-    assert eur in p and eur not in payload("b5_payload", "--coefs")
+    assert not any(k.startswith(f"SCENARIOS!A{SL.EURUSD - 3}") for k in p)  # EUR/USD: annual row is a formula over the quarters
     sq = payload("scenarios_q_payload")
     assert "B5_EXTERNAL!J69" in sq["ANCHORS!BB29:BC29"][0][0] and "B5_EXTERNAL!J45" in sq["ANCHORS!BB12:BK12"][0][0]
 
@@ -369,10 +368,14 @@ def test_deficit_2026_by_treasury_months():
 
 
 def test_fuel_input_is_quarter_on_quarter():
-    """Andrey, 29.10: fuel is entered as q/q; the y/y that B3_PRICES row 45 reads chains it with the same quarter a year ago."""
-    f = payload("shocks_payload")[f"SCENARIOS!A{SL.FUEL_HEAD}:L{SL.FUEL_QQ_RES + 1}"]
-    q, lag = SL.FUEL_QQ, SL.FUEL_LAG
-    assert f[1][2] == 13.6 and f[2][2:6] == [3.7, 1.6, 18.6, 6.8] and f[2][6] == f"=C{SL.FUEL_QQ_RES}"
-    assert f[3][3] == f'=IF(D{q}="";"";(1+B3_PRICES!F45/100)*(1+D{q}/100)/(1+D{lag}/100)*100-100)'
-    b3 = payload("cpi_blocks_payload")["B3_PRICES!A37:P60"]
-    assert f"SCENARIOS!D{SL.FUEL}" in b3[8][6]  # 2026Q4 of the fuel block (column G)
+    """Andrey, 29.10: fuel is entered as q/q in one SCENARIOS row; B3_PRICES section 6 chains it into the y/y of row 45."""
+    f = payload("shocks_payload")[f"SCENARIOS!A{SL.FUEL_HEAD}:L{SL.FUEL_QQ + 1}"]
+    q = SL.FUEL_QQ
+    assert f[1][2] == 13.6 and len(f) == 3 and SL.LABOUR == SL.FUEL_QQ + 3  # head, input, note; no helper rows
+    b3 = payload("cpi_blocks_payload")["B3_PRICES!A37:P67"]
+    sec = {r[0]: r for r in b3[-4:]}
+    assert sec["FUEL_IN"][6] == f'=IF(SCENARIOS!D{q}="";"";SCENARIOS!D{q})'
+    assert sec["FUEL_LAG"][5:8] == [3.7, 1.6, "=D67"] and sec["FUEL_QQ"][3:5] == [18.6, 6.8]
+    assert sec["FUEL_YY"][6] == '=IF(G64="";"";(1+F45/100)*(1+G64/100)/(1+G65/100)*100-100)'
+    assert b3[8][6].startswith('=IF(G66<>"";G66;')  # 2026Q4 of the fuel block (column G)
+

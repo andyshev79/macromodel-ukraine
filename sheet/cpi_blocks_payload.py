@@ -10,7 +10,7 @@ import sys
 
 from macromodel import scenario_layout as SL
 from macromodel.blocks import cpi_blocks as B
-from macromodel.blocks.shocks import FUEL_ROW, SHOCK_ROW, TARIFF_ROW
+from macromodel.blocks.shocks import FUEL_QOQ, SHOCK_ROW, TARIFF_ROW
 
 QUARTERS = [f"{y}Q{q}" for y in (2026, 2027, 2028) for q in (1, 2, 3, 4)]
 COLS = "DEFGHIJKLMNO"
@@ -25,6 +25,9 @@ BRENT_2025 = [75.8, 68.0, 69.0, 63.6]
 from sheet.scenarios_quarterly_payload import ROW as QROW  # main quarterly block of SCENARIOS (D:M = 2026Q3..2028Q4)
 BRENT_Q = QROW["BRENT"] + 3  # active-scenario Brent row; the annual Brent block was removed 2026-10-29 (one value, one row)
 MAIN_Q = {c: s for c, s in zip(COLS[2:], "DEFGHIJKLM")}
+
+# section 6: fuel input q/q (SCENARIOS, one row) -> y/y of the fuel block (row 45); moved here from SCENARIOS 2026-10-29
+FU = {"HEAD": 62, "IN": 64, "LAG": 65, "YY": 66, "QQ": 67}
 
 rows_c = B.coef_rows()
 CROW = {(r["eq"], r["var"]): B.COEF_FIRST + i for i, r in enumerate(rows_c)}
@@ -88,9 +91,9 @@ rows = [
     + [harv(c) for c in COLS] + ["B10_AGRO строка 26 (урожай шести культур)"],
     ["FUEL", B.NAMES["FUEL"], f"{kv('FUEL', 'const')} + {kv('FUEL', 'BRENT')} × нефть + {kv('FUEL', 'FX')} × девальвация"]
     + [fact("FUEL", i) for i in range(FACT)]
-    + [f"=IF(SCENARIOS!{SCQ[c]}{FUEL_ROW}<>\"\";SCENARIOS!{SCQ[c]}{FUEL_ROW};"
+    + [f"=IF({c}{FU['YY']}<>\"\";{c}{FU['YY']};"
        f"{C('FUEL', 'const')}+{C('FUEL', 'BRENT')}*{c}43+{C('FUEL', 'FX')}*{c}40)" for c in fc]
-    + [f"задано в SCENARIOS (ввод кв/кв строка {SL.FUEL_QQ}, итог г/г строка {FUEL_ROW}) — берётся оно, иначе уравнение"],
+    + [f"задано в SCENARIOS (ввод кв/кв строка {SL.FUEL_QQ}, г/г — строка {FU['YY']}) — берётся оно, иначе уравнение"],
     ["RAW", B.NAMES["RAW"], f"{kv('RAW', 'const')} + {kv('RAW', 'RAW_L1')} × прошлый квартал + {kv('RAW', 'FUEL_L1')} × топливо прошлого квартала "
                             f"{kv('RAW', 'HARV')} × рост урожая"]
     + [fact("RAW", i) for i in range(FACT)]
@@ -122,6 +125,25 @@ rows = [
      for k, r in [("CORE", 50), ("RAW", 46), ("ADM", 49), ("FUEL", 45)]] + [
     ["CPI_OTHER", "Константа и ставка НБУ", ""] + [f"={c}51-SUM({c}56:{c}59)" for c in COLS],
 ]
+pc = lambda c: COLS[COLS.index(c) - 1]
+fuel_rows = [
+    ["6. Топливо: ввод SCENARIOS (кв/кв) → г/г для блока «топливо» (строка 45)"],
+    ["Код", "Показатель", "Как считается"] + QUARTERS + ["Комментарий"],
+    ["FUEL_IN", "Ввод: прирост цен топлива к прошлому кварталу", f"SCENARIOS строка {SL.FUEL_QQ}, % кв/кв", "", ""]
+    + [f"=IF(SCENARIOS!{SCQ[c]}{SL.FUEL_QQ}=\"\";\"\";SCENARIOS!{SCQ[c]}{SL.FUEL_QQ})" for c in COLS[2:]]
+    + ["пусто — ввода нет, работает уравнение строки 45"],
+    ["FUEL_LAG", "Тот же квартал год назад, кв/кв", "сезонность: кв/кв четыре квартала назад", "", "",
+     FUEL_QOQ["2025Q3"], FUEL_QOQ["2025Q4"]] + [f"={COLS[COLS.index(c) - 4]}{FU['QQ']}" for c in COLS[4:]]
+    + ["2025Q3–Q4 — MacroStat, ИПЦ «топливо и масла»"],
+    ["FUEL_YY", "Топливо из ввода, г/г", "(1 + г/г прошлого квартала) × (1 + ввод) / (1 + кв/кв год назад) − 1", "", ""]
+    + [f"=IF({c}{FU['IN']}=\"\";\"\";(1+{pc(c)}45/100)*(1+{c}{FU['IN']}/100)/(1+{c}{FU['LAG']}/100)*100-100)" for c in COLS[2:]]
+    + ["идёт в строку 45 (2026Q3 — проверка: факт НБУ 46,2)"],
+    ["FUEL_QQ", "Топливо: итог кв/кв (ввод или уравнение)", "ввод, иначе из г/г строки 45", FUEL_QOQ["2026Q1"], FUEL_QOQ["2026Q2"]]
+    + [f"=IF({c}{FU['IN']}<>\"\";{c}{FU['IN']};(1+{c}45/100)/(1+{pc(c)}45/100)*(1+{c}{FU['LAG']}/100)*100-100)" for c in COLS[2:]]
+    + ["показывает, какой кв/кв даёт уравнение"],
+]
+rows += [[""]] + fuel_rows
+assert 37 + len(rows) - 1 == FU["QQ"]
 out[f"B3_PRICES!A37:P{37 + len(rows) - 1}"] = rows
 out["ANCHORS!BB10"] = [["=INDEX(B3_PRICES!$D$52:$O$52;MATCH(BB$4;B3_PRICES!$D$39:$O$39;0))"]]
 if "--coefs" in sys.argv:

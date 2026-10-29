@@ -70,30 +70,10 @@ out["B2_DEMAND!A1:H16"] = top
 # Peace effect after a ceasefire, annual, per scenario (SCENARIOS rows PEACE_ROW..; active columns L:N)
 from macromodel import scenario_layout as SL
 
-PEACE_FIRST = SL.PEACE
-PEACE_ROW = PEACE_FIRST + 3
+PEACE_ROW = SL.PEACE_C  # SCENARIOS annual table: PEACE_C, the next row PEACE_I
+assert SL.PEACE_I == PEACE_ROW + 1
 ACT_C = dict(zip("EFG", "LMN"))
-PEACE = [
-    ("Эффект мира: снижение нормы сбережений", "п.п. к росту потребления домохозяйств",
-     [0, 4, 3, 0, 0, 3, 0, 5, 3],
-     "Оценка Claude. Во время войны семьи копят про запас; после прекращения огня тратят больше. "
-     "Год прекращения огня и следующий (строка 16)"),
-    ("Эффект мира: восстановление", "п.п. к росту инвестиций (ВНОК)",
-     [0, 15, 10, 0, 0, 10, 5, 20, 15],
-     "Оценка Claude. Проекты восстановления на средства партнёров и страхование военных рисков: "
-     "+10–20% ВНОК ≈ 4–8 млрд USD в год при потребности около 50 млрд USD в год (оценка RDNA4)"),
-]
-out[f"SCENARIOS!A{PEACE_FIRST}:O{PEACE_FIRST + 5}"] = [
-    ["Эффект мира после прекращения огня (B2_DEMAND)"],
-    ["Параметр", "Единицы", "База", "", "", "Пессимистичный", "", "", "Оптимистичный", "", "", "Активный"],
-    ["", "", 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028, 2026, 2027, 2028],
-] + [[name, unit] + v + [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a};{b};{c})"
-                        for a, b, c in [(f"C{PEACE_FIRST + 3 + k}", f"F{PEACE_FIRST + 3 + k}", f"I{PEACE_FIRST + 3 + k}"),
-                                        (f"D{PEACE_FIRST + 3 + k}", f"G{PEACE_FIRST + 3 + k}", f"J{PEACE_FIRST + 3 + k}"),
-                                        (f"E{PEACE_FIRST + 3 + k}", f"H{PEACE_FIRST + 3 + k}", f"K{PEACE_FIRST + 3 + k}")]] + [src]
-     for k, (name, unit, v, src) in enumerate(PEACE)] + [
-    ["Как считается: добавка к уравнениям потребления и ВНОК в B2_DEMAND в годы после прекращения огня. "
-     "Смягчает падение доходов военных (B4_LABOUR, MIL_C), которое модель считает отдельно."]]
+# the annual SCENARIOS rows are typed in the annual table since 2026-10-29 (labels: scenarios_quarterly_payload)
 
 PEACE_COEF_FIRST = 168  # after B4 MIL_ rows 164-167
 pc = peace_coefs()
