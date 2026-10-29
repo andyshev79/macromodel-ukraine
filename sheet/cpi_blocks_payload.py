@@ -48,14 +48,16 @@ prev = lambda c: COLS[COLS.index(c) - 1]
 fc = COLS[FACT:]  # forecast columns G..O
 
 
+B10_YEAR = {"2026": "E", "2027": "F", "2028": "G"}
+
+
 def harv(c):
     """Harvest growth that shows in quarter c: Q3-Q4 of a year and Q1-Q2 of the next."""
     q = QUARTERS[COLS.index(c)]
     y = int(q[:4]) if q[-1] in "34" else int(q[:4]) - 1
     if y == 2025:
         return round(float(B.harvest_growth()["2025"]), 1)
-    p = "77,6" if y == 2026 else f"SCENARIOS!{SC_YEAR[str(y - 1)]}{SL.Y['HARVEST']}"
-    return f"=(SCENARIOS!{SC_YEAR[str(y)]}{SL.Y['HARVEST']}/{p}-1)*100"
+    return f"=B10_AGRO!{B10_YEAR[str(y)]}26"  # harvest growth of the six crops (B10_AGRO counts them since 2026-10-25)
 
 
 def tariffs(c):
@@ -80,7 +82,7 @@ rows = [
     + [f"=({c}42/{b}-1)*100".replace(",", ".").replace(".", ",") for c, b in zip(COLS[:4], BRENT_2025)]
     + [f"=({c}42/{COLS[COLS.index(c) - 4]}42-1)*100" for c in COLS[4:]],
     ["HARV", "Рост урожая зерновых и масличных", "урожай года действует с 3 кв. по 2 кв. следующего"]
-    + [harv(c) for c in COLS] + ["SCENARIOS, строка 24"],
+    + [harv(c) for c in COLS] + ["B10_AGRO строка 26 (урожай шести культур)"],
     ["FUEL", B.NAMES["FUEL"], f"{kv('FUEL', 'const')} + {kv('FUEL', 'BRENT')} × нефть + {kv('FUEL', 'FX')} × девальвация"]
     + [fact("FUEL", i) for i in range(FACT)]
     + [f"=IF(SCENARIOS!{SCQ[c]}{FUEL_ROW}<>\"\";SCENARIOS!{SCQ[c]}{FUEL_ROW};"

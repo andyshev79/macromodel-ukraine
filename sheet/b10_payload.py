@@ -40,7 +40,7 @@ out[f"SCENARIOS!A{SC_FIRST}:O{SC_FIRST + 6}"] = [
     ["Оценка Claude: при мире разминирование возвращает поля, при затяжной войне площадь сокращается. "
      "Отдельно от сдвига пшеница → яровые (COEFS A_SHIFT_*)"],
     ["Как считается: урожай культуры 2027–28 = средний урожай 2023–2026 × (1 + площадь) × (1 + погода) × сдвиг структуры; "
-     "строка 24 (урожай) больше не используется — урожай считает B10_AGRO по культурам."],
+     f"строка {SL.Y['HARVEST']} показывает итог B10_AGRO, вводить его не нужно."],
 ]
 
 g0 = h["grain_my"] + 0  # 2025 marketing-year values, numbers
@@ -142,6 +142,11 @@ text += [
     [f"={cc}25*(1-{C('A_SIGMA')}/100)" for cc in "FG"] + ["для сравнения с 2022 (70 млн т) и 2024 (76 млн т)"],
 ]
 out["B10_AGRO!A1:I50"] = text
+HV = SL.Y["HARVEST"]  # the annual row shows B10's harvest (active scenario); since 2026-10-25 it is not an input
+out[f"SCENARIOS!A{HV}:O{HV}"] = [["Урожай шести культур (считает B10_AGRO, активный сценарий)", "млн т"] + [""] * 9
+                                 + [f"=B10_AGRO!{c}25" for c in "EFG"]
+                                 + [f"Не вводить: урожай считает B10_AGRO по культурам (погода и площадь — строки {SL.WEATHER}–{SL.AREA}). "
+                                    "Рост урожая идёт в ИПЦ «сырые продукты» (B3_PRICES строка 44)"]]
 from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
 
 json.dump(protect(out), sys.stdout, ensure_ascii=False)
