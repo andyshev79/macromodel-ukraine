@@ -25,6 +25,9 @@ def test_metallurgy_levels_chain_the_quarterly_index():
 def test_annual_cells_are_formulas_over_their_quarters():
     out = build()
     for code, ar, *_ in PARAMS:
+        if ar is None:  # Brent: no annual row, B3_PRICES reads the quarters
+            assert not any(k.startswith("SCENARIOS!C") and k.endswith("None") for k in out)
+            continue
         cells = out[f"SCENARIOS!C{ar}:K{ar}"][0]
         assert all(c.startswith("=") for c in cells)
         if code in RL.IND:  # metallurgy and ports: annual = average of the after-recovery path in B8_CAPACITY
@@ -55,3 +58,17 @@ def test_protect_blanks_annual_inputs_in_other_payloads():
     out = protect({f"SCENARIOS!A{ar}:N{ar}": [["x", "y"] + [1] * 9 + ["=L", "=M", "=N"]]})
     row = out[f"SCENARIOS!A{ar}:N{ar}"][0]
     assert row[:2] == ["x", "y"] and row[2:11] == [None] * 9 and row[11] == "=L"
+
+
+def test_brent_is_read_by_quarter_without_an_annual_row():
+    """2026-10-29, Andrey: no duplicate Brent row; B3_PRICES takes each forecast quarter from the active quarterly row."""
+    import json, subprocess, sys
+    from macromodel import scenario_layout as SL
+    assert not hasattr(SL, "BRENT")
+    out = json.loads(subprocess.run([sys.executable, "sheet/cpi_blocks_payload.py"], capture_output=True, text=True,
+                                    env={**__import__("os").environ, "PYTHONPATH": "."}, check=True).stdout)
+    assert not any(k.startswith("SCENARIOS!") for k in out)
+    rows = next(v for k, v in out.items() if k.startswith("B3_PRICES!A37"))
+    brent = next(r for r in rows if r and r[0] == "BRENT")
+    act = ROW["BRENT"] + 3
+    assert brent[6] == f"=SCENARIOS!E{act}" and brent[14] == f"=SCENARIOS!M{act}"

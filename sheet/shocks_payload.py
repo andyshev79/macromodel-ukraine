@@ -13,6 +13,8 @@ import sys
 
 from macromodel import quarterly
 from macromodel import scenario_layout as SL
+from sheet.scenarios_quarterly_payload import ROW as _QROW
+BRENT_R = _QROW["BRENT"]  # quarterly Brent rows (Base, Pess, Opt, active)
 from macromodel.blocks.shocks import (COEF_FIRST, FUEL_COEF_ROW, FUEL_NORM_ROW, FUEL_QOQ, FUEL_ROW, MET_ROW, SHOCKS, TARIFF_ROW,
                                       estimated, fuel)
 
@@ -76,7 +78,7 @@ out[f"SCENARIOS!A{SL.FUEL_HEAD}:L{QR + 1}"] = [
     [f"Как считается: вводите прирост цен топлива к прошлому кварталу (строка {QI}); 2026Q3 — факт (MacroStat, ИПЦ «топливо и масла»). "
      f"Строка {LAG} — тот же квартал год назад: видно сезонность. Итог г/г (строка {RES}) = (1 + г/г прошлого квартала) × (1 + ввод) / "
      f"(1 + кв/кв год назад) − 1, он идёт в блок «топливо» B3_PRICES, строка 45. Пустой квартал = уравнение B3: 3,61 + 0,46 × рост "
-     f"нефти Brent (строка {SL.BRENT}) + 1,04 × девальвация; строка {QR} показывает, какой кв/кв из него получился."],
+     f"нефти Brent (строки {BRENT_R}–{BRENT_R + 3}) + 1,04 × девальвация; строка {QR} показывает, какой кв/кв из него получился."],
 ]
 if "--coefs" in sys.argv:  # SCENARIOS rows hold the user's shock inputs: rewrite only on a fresh frame
     out = {k: v for k, v in out.items() if k.startswith("COEFS")}

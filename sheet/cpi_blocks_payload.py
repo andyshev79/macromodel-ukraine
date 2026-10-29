@@ -20,9 +20,11 @@ ANCH4 = ["AV", "AW", "AX", "AY"] + ANCH[:8]  # same quarter last year
 SCQ = {c: s for c, s in zip(COLS[2:], "CDEFGHIJKL")}  # SCENARIOS quarter columns (2026Q3..2028Q4)
 YEAR_COL = {"2026": "E", "2027": "F", "2028": "G"}  # B3 annual columns
 SC_YEAR = {"2026": "L", "2027": "M", "2028": "N"}  # SCENARIOS active annual columns
-BRENT_ROW = SL.BRENT
 PRESS_2026Q3 = {"CORE": 8.8, "RAW": 6.7, "ADM": 13.6, "FUEL": 46.2}  # NBU, September 2026 y/y
 BRENT_2025 = [75.8, 68.0, 69.0, 63.6]
+from sheet.scenarios_quarterly_payload import ROW as QROW  # main quarterly block of SCENARIOS (D:M = 2026Q3..2028Q4)
+BRENT_Q = QROW["BRENT"] + 3  # active-scenario Brent row; the annual Brent block was removed 2026-10-29 (one value, one row)
+MAIN_Q = {c: s for c, s in zip(COLS[2:], "DEFGHIJKLM")}
 
 rows_c = B.coef_rows()
 CROW = {(r["eq"], r["var"]): B.COEF_FIRST + i for i, r in enumerate(rows_c)}
@@ -77,7 +79,8 @@ rows = [
     + [f"=(ANCHORS!{a}20/ANCHORS!{b}20-1)*100" for a, b in zip(ANCH, ANCH4)] + ["из ANCHORS, строка 20 (B4)"],
     ["BRENT", "Нефть Brent", "USD/барр., средняя за квартал"]
     + [round(float(x_), 1) for x_ in B.Q.long_quarterly()["PX_BRENT_USD"].loc["2026Q1":"2026Q3"]]
-    + [f"=SCENARIOS!{SC_YEAR[year(c)]}{BRENT_ROW}" for c in fc] + [f"факт EIA; прогноз SCENARIOS, строка {BRENT_ROW}"],
+    + [f"=SCENARIOS!{MAIN_Q[c]}{BRENT_Q}" for c in fc]
+    + [f"факт EIA; прогноз — SCENARIOS строка {BRENT_Q} (активный сценарий, по кварталам)"],
     ["BRENT_G", "Рост цены нефти", "% г/г"]
     + [f"=({c}42/{b}-1)*100".replace(",", ".").replace(".", ",") for c, b in zip(COLS[:4], BRENT_2025)]
     + [f"=({c}42/{COLS[COLS.index(c) - 4]}42-1)*100" for c in COLS[4:]],
@@ -121,12 +124,6 @@ rows = [
 ]
 out[f"B3_PRICES!A37:P{37 + len(rows) - 1}"] = rows
 out["ANCHORS!BB10"] = [["=INDEX(B3_PRICES!$D$52:$O$52;MATCH(BB$4;B3_PRICES!$D$39:$O$39;0))"]]
-out[f"SCENARIOS!A{BRENT_ROW - 1}:O{BRENT_ROW}"] = [
-    ["Нефть", "Единицы", "База", "", "", "Пессимистичный", "", "", "Оптимистичный", "", "", "Активный"],
-    ["Цена нефти Brent (2026 — 4 кв., дальше средняя за год)", "USD/барр."] + [90, 80, 75, 95, 90, 85, 85, 72, 70]
-    + [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a}{BRENT_ROW};{b}{BRENT_ROW};{c}{BRENT_ROW})" for a, b, c in ("CFI", "DGJ", "EHK")]
-    + ["Факт 3 кв. 2026: 96 USD. Оценка Claude: снижение по мере ослабления шока; пессим. — дорогая нефть, оптим. — дешевле"],
-]
 if "--coefs" in sys.argv:
     out = {k: v for k, v in out.items() if k.startswith("COEFS")}
 from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
