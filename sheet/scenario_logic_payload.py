@@ -1,4 +1,4 @@
-"""Logic checks of the scenario inputs and boundary values (SCENARIOS rows 142+, 2026-10-25).
+"""Logic checks of the scenario inputs and boundary values (bottom of SCENARIOS, 2026-10-25).
 
 Andrey asked for checks inside SCENARIOS so that scenarios do not contradict each other or the data,
 and for boundary values (total port capacity, total generation and similar). Three kinds of checks:
@@ -11,7 +11,9 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 import json
 import sys
 
-FIRST = 142
+from macromodel import scenario_layout as SL
+
+FIRST = SL.LIMITS
 SCEN = {"База": "CDE", "Пессимистичный": "FGH", "Оптимистичный": "IJK"}
 YEARS = {"База": "C$15:E$15", "Пессимистичный": "F$15:H$15", "Оптимистичный": "I$15:K$15"}
 
@@ -45,8 +47,9 @@ lim = lambda code: f"$D${L[code]}"
 ORDER = [(18, "Мощность энергосистемы", 1), (19, "Порты", 1), (20, "Внешнее финансирование бюджета", 1),
          (17, "Удары по энергетике", -1), (21, "Расходы на оборону", -1), (22, "Чистая миграция (возврат +, отъезд −)", 1),
          (23, "Мобилизация", -1), (28, "Рост ВВП еврозоны", 1), (31, "Приток иностранных рабочих", 1),
-         (63, "Загрузка металлургии", 1), (123, "Эффект мира: потребление", 1), (124, "Эффект мира: восстановление", 1),
-         (131, "Деньги на восстановление", 1), (138, "Погода для урожая", 1), (139, "Посевная площадь", 1)]
+         (SL.MET_Y, "Загрузка металлургии", 1), (SL.PEACE_C, "Эффект мира: потребление", 1),
+         (SL.PEACE_I, "Эффект мира: восстановление", 1), (SL.RECON, "Деньги на восстановление", 1),
+         (SL.WEATHER, "Погода для урожая", 1), (SL.AREA, "Посевная площадь", 1)]
 
 
 def over(row, cols, years, limit, label=""):
@@ -64,7 +67,7 @@ def ceasefire(cols):
 
 checks = []
 # 1. limits, per scenario
-for code, row, label in [("LIM_PORTS", 19, ""), ("LIM_CAP", 18, ""), ("LIM_MET", 63, ""), ("LIM_DEF", 21, "")]:
+for code, row, label in [("LIM_PORTS", 19, ""), ("LIM_CAP", 18, ""), ("LIM_MET", SL.MET_Y, ""), ("LIM_DEF", 21, "")]:
     name = next(n for c, n, *_ in LIMITS if c == code)
     checks.append([code.replace("LIM_", "L_"), f"Не выше предела: {name[0].lower() + name[1:]}", f"строка {row} ≤ D{L[code]}"] +
                   [over(row, SCEN[s], YEARS[s], lim(code)) for s in SCEN])
@@ -77,15 +80,17 @@ checks.append(["L_CAP_G", "Мощность энергосистемы раст�
               [f"=ARRAYFORMULA(IF(MAX({c[0]}18-15;{c[1]}18-{c[0]}18;{c[2]}18-{c[1]}18)<={lim('LIM_CAP_G')};\"OK\";"
                f"\"ВНИМАНИЕ: прирост \"&TEXTJOIN(\", \";TRUE;IF({{{c[0]}18-15\\{c[1]}18-{c[0]}18\\{c[2]}18-{c[1]}18}}>{lim('LIM_CAP_G')};"
                f"{YEARS[s]}&\": +\"&{{{c[0]}18-15\\{c[1]}18-{c[0]}18\\{c[2]}18-{c[1]}18}}&\" ГВт\";\"\"))))" for s, c in SCEN.items()])
-# harvest implied by area and weather (rows 138-139) against the boundary
+# harvest implied by area and weather (SL.WEATHER, SL.AREA) against the boundary
+A, W = SL.AREA, SL.WEATHER
 checks.append(["L_HARV", "Урожай не выше предела подконтрольной территории",
                f"средний 2023–2026 (B10_AGRO I25) × площадь × погода ≤ D{L['LIM_HARV']}"] +
-              [f"=ARRAYFORMULA(IF(MAX(B10_AGRO!$I$25*(1+{c[1]}139:{c[2]}139/100)*(1+{c[1]}138:{c[2]}138/100))<={lim('LIM_HARV')};\"OK\";"
-               f"\"ВНИМАНИЕ: урожай до \"&ROUND(MAX(B10_AGRO!$I$25*(1+{c[1]}139:{c[2]}139/100)*(1+{c[1]}138:{c[2]}138/100));1)&\" млн т\"))"
+              [f"=ARRAYFORMULA(IF(MAX(B10_AGRO!$I$25*(1+{c[1]}{A}:{c[2]}{A}/100)*(1+{c[1]}{W}:{c[2]}{W}/100))<={lim('LIM_HARV')};\"OK\";"
+               f"\"ВНИМАНИЕ: урожай до \"&ROUND(MAX(B10_AGRO!$I$25*(1+{c[1]}{A}:{c[2]}{A}/100)*(1+{c[1]}{W}:{c[2]}{W}/100));1)&\" млн т\"))"
                for s, c in SCEN.items()])
-# military headcount, quarterly rows 110-112 (C:L)
-checks.append(["L_MIL", "Численность военных не выше предела", f"строки 110–112 ≤ D{L['LIM_MIL']}"] +
-              [f"=IF(MAX(C{r}:L{r})<={lim('LIM_MIL')};\"OK\";\"ВНИМАНИЕ: до \"&MAX(C{r}:L{r})&\" тыс.\")" for r in (110, 111, 112)])
+# military headcount, quarterly labour rows (C:L), Base / Pess / Opt
+MIL = [SL.LABOUR + 30 + k for k in range(3)]  # military headcount, B4_LABOUR block
+checks.append(["L_MIL", "Численность военных не выше предела", f"строки {MIL[0]}–{MIL[2]} ≤ D{L['LIM_MIL']}"] +
+              [f"=IF(MAX(C{r}:L{r})<={lim('LIM_MIL')};\"OK\";\"ВНИМАНИЕ: до \"&MAX(C{r}:L{r})&\" тыс.\")" for r in MIL])
 # indices and shares within 0..1
 checks.append(["L_SHARE", "Индексы и доли от 0 до 1", "строки 17, 32, 33"] +
               [f"=IF(AND(MIN({c[0]}17:{c[2]}17;{c[0]}32:{c[2]}33)>=0;MAX({c[0]}17:{c[2]}17;{c[0]}32:{c[2]}33)<=1);\"OK\";"
@@ -98,9 +103,10 @@ checks.append(["F_DEF", "Оборона 2026 согласована с факт�
               [f"=IF(ABS({c[0]}21-{lim('FACT_DEF')})<=5;\"OK\";\"ВНИМАНИЕ: \"&{c[0]}21&\"% при факте \"&{lim('FACT_DEF')}&\"%\")"
                for s, c in SCEN.items()])
 # 3. consistency with the ceasefire quarter (row 16)
-checks.append(["C_PEACE", "Эффект мира не раньше прекращения огня", "строки 123–124 = 0 в годы до года строки 16"] +
-              [f"=ARRAYFORMULA(IF(SUM(({YEARS[s]}<{ceasefire(c)})*(ABS({c[0]}123:{c[2]}123)+ABS({c[0]}124:{c[2]}124)))=0;\"OK\";"
-               f"\"ВНИМАНИЕ: эффект мира в \"&TEXTJOIN(\", \";TRUE;IF(({YEARS[s]}<{ceasefire(c)})*(ABS({c[0]}123:{c[2]}123)+ABS({c[0]}124:{c[2]}124))>0;"
+PC, PI = SL.PEACE_C, SL.PEACE_I
+checks.append(["C_PEACE", "Эффект мира не раньше прекращения огня", f"строки {SL.PEACE_C}–{SL.PEACE_I} = 0 в годы до года строки 16"] +
+              [f"=ARRAYFORMULA(IF(SUM(({YEARS[s]}<{ceasefire(c)})*(ABS({c[0]}{PC}:{c[2]}{PC})+ABS({c[0]}{PI}:{c[2]}{PI})))=0;\"OK\";"
+               f"\"ВНИМАНИЕ: эффект мира в \"&TEXTJOIN(\", \";TRUE;IF(({YEARS[s]}<{ceasefire(c)})*(ABS({c[0]}{PC}:{c[2]}{PC})+ABS({c[0]}{PI}:{c[2]}{PI}))>0;"
                f"{YEARS[s]};\"\"))&\" до прекращения огня\"))" for s, c in SCEN.items()])
 checks.append(["C_STRIKES", "После прекращения огня удары слабые", "строка 17 ≤ 0,3 в годы после года строки 16"] +
               [f"=ARRAYFORMULA(IF(SUM(({YEARS[s]}>{ceasefire(c)})*({c[0]}17:{c[2]}17>0,3))=0;\"OK\";"
@@ -109,9 +115,9 @@ checks.append(["C_STRIKES", "После прекращения огня удар
 checks.append(["C_DEF", "После прекращения огня оборона не растёт", "строка 21 в год после года строки 16 ≤ значения года прекращения"] +
               [f"=ARRAYFORMULA(IF(SUM(({c[1]}$15:{c[2]}$15>{ceasefire(c)})*({c[1]}21:{c[2]}21>{c[0]}21:{c[1]}21))=0;\"OK\";"
                f"\"ВНИМАНИЕ: оборона растёт после прекращения огня\"))" for s, c in SCEN.items()])
-checks.append(["C_MIL", "Без прекращения огня нет демобилизации", "численность военных (строки 110–112) падает только при мире"] +
+checks.append(["C_MIL", "Без прекращения огня нет демобилизации", f"численность военных (строки {MIL[0]}–{MIL[2]}) падает только при мире"] +
               [f"=ARRAYFORMULA(IF(OR({ceasefire(c)}<9999;MIN(D{r}:L{r}-C{r}:K{r})>=0);\"OK\";"
-               f"\"ВНИМАНИЕ: численность падает без прекращения огня\"))" for (s, c), r in zip(SCEN.items(), (110, 111, 112))])
+               f"\"ВНИМАНИЕ: численность падает без прекращения огня\"))" for (s, c), r in zip(SCEN.items(), MIL)])
 
 # 4. ordering pessimistic <= base <= optimistic, 2027-2028
 order = []

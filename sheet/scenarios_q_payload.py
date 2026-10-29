@@ -12,12 +12,14 @@ Quarter columns C:L of SCENARIOS are 2026Q3..2028Q4, the same order as ANCHORS B
 import json
 import sys
 
+from macromodel import scenario_layout as SL
 
 QUARTERS = [f"{y}Q{q}" for y in (2026, 2027, 2028) for q in (1, 2, 3, 4)][2:]
 QCOLS = "CDEFGHIJKL"
-HEAD = 38
-R = {"FIN": (40, 41, 42), "STRIKES": (43, 44, 45), "FIN_ACT": 46, "STRIKES_ACT": 47,
-     "GDP": 50, "CPI": 51, "FX": 52, "RATE": 53}
+HEAD = SL.Q_HEAD
+F, S = SL.FIN_Q, SL.STRIKES_Q
+R = {"FIN": (F, F + 1, F + 2), "STRIKES": (S, S + 1, S + 2), "FIN_ACT": S + 3, "STRIKES_ACT": S + 4,
+     "GDP": SL.GDP_Q, "CPI": SL.CPI_Q, "FX": SL.FX_Q, "RATE": SL.RATE_Q}
 YEAR_COLS = {2026: ("C", "D"), 2027: ("E", "H"), 2028: ("I", "L")}  # first and last quarter column per year
 ANNUAL_COL = {2026: "L", 2027: "M", 2028: "N"}
 blank = [""] * len(QCOLS)
@@ -45,7 +47,7 @@ rows = [
     ["Курс UAH/USD, средний", "грн за 1 USD", 44.69, 44.91] + blank[2:],
     ["Учётная ставка НБУ", "%, конец квартала", 16, 16] + blank[2:],
 ]
-out = {f"SCENARIOS!A36:L{36 + len(rows) - 1}": rows}
+out = {f"SCENARIOS!A{SL.Q_FIN}:L{SL.Q_FIN + len(rows) - 1}": rows}
 
 # annual strike intensity of the active scenario = average of its quarters, empty quarters = annual value
 for y, (c0, c1) in YEAR_COLS.items():

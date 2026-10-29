@@ -1,8 +1,8 @@
 """Scenario shocks outside the estimated equations: utility tariff hikes and a metallurgy stop.
 
-Tariffs (SCENARIOS row 57, by quarter, all scenarios): CPI y/y rises by the weight of
+Tariffs (SCENARIOS row SL.TARIFF, by quarter, all scenarios): CPI y/y rises by the weight of
 housing and utilities in CPI times the hike, in the quarter of the hike and the next three.
-Metallurgy (SCENARIOS row 63, utilisation in % of 2025, by year and scenario): the change
+Metallurgy (SCENARIOS row SL.MET_Y, utilisation in % of 2025, by year and scenario): the change
 in utilisation, in points of 2025 output, moves manufacturing, mining and real exports by the
 metallurgy elasticities below (a restart from 15 to 50 adds 35% of 2025 output, not +233%).
 Since 2026-10-24 quarterly CPI is built from NBU blocks (cpi_blocks): tariffs enter administered
@@ -11,9 +11,11 @@ FUEL_W/FUEL_NORM stay on COEFS for reference but are not used in the sheet.
 TARIFF_W, MET_C and MET_X now come from the long history (estimated() below); MET_B stays
 calibrated (the post-invasion fit is not significant).
 """
+from macromodel import scenario_layout as SL
+
 COEF_FIRST = 90  # after B7 transmission (85-89)
-TARIFF_ROW = 57
-MET_ROW = 63
+TARIFF_ROW = SL.TARIFF
+MET_ROW = SL.MET_Y
 
 SHOCKS = {
     "TARIFF_W": (0.11, "B3", "Вес «Жильё, вода, электроэнергия, газ» в ИПЦ ≈ 11%; уточнить по весам Госстата текущего года. "
@@ -28,7 +30,10 @@ SHOCKS = {
 SHOCK_ROW = {k: COEF_FIRST + i for i, k in enumerate(SHOCKS)}
 
 
-FUEL_ROW = 74  # SCENARIOS: fuel prices y/y by quarter
+FUEL_ROW = SL.FUEL  # SCENARIOS: fuel prices y/y by quarter (result; the input is q/q in SL.FUEL_QQ)
+# CPI "fuels and lubricants", % to the previous quarter (end of quarter): product of the three monthly indices,
+# MacroStat sheet CPI (Gosstat), read 2026-10-29. The y/y of these months equals the NBU fuel block (46.2 in 2026Q3).
+FUEL_QOQ = {"2025Q3": 3.7, "2025Q4": 1.6, "2026Q1": 18.6, "2026Q2": 6.8, "2026Q3": 13.6}
 FUEL_COEF_ROW, FUEL_NORM_ROW = 105, 106  # COEFS, after the wage equation (98-104)
 MET_FIRST = "2024Q1"  # after Mariupol and the 2023 rebound: today's weight of metallurgy
 

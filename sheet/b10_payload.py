@@ -5,6 +5,7 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 import json
 import sys
 
+from macromodel import scenario_layout as SL
 from macromodel.blocks.agro import (CALIBRATED, COEF_FIRST, CROPS, FACT, GRAINS, NOW, ROW, SPRING, coef_rows, crops,
                                     history, sources)
 
@@ -22,7 +23,7 @@ out[f"COEFS!A{COEF_FIRST}:L{COEF_FIRST + len(rows) - 1}"] = [
     [r["code"], "B10", r["eq"], r["var"], float(r["coef"]), "", "", "", r["method"], "", "2026-10-25", r["note"]] for r in rows]
 
 # SCENARIOS: sunflower oil price, weather and sown area (base / pessimistic / optimistic), active columns L:N
-SC_FIRST = 134
+SC_FIRST = SL.AGRO_FIRST
 SUN, WEA, AREA = SC_FIRST + 3, SC_FIRST + 4, SC_FIRST + 5
 act = lambda r: [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a}{r};{b}{r};{c_}{r})" for a, b, c_ in ["CFI", "DGJ", "EHK"]]
 out[f"SCENARIOS!A{SC_FIRST}:O{SC_FIRST + 6}"] = [

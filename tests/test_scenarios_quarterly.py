@@ -3,9 +3,23 @@ from sheet import recovery_layout as RL
 from sheet.scenarios_quarterly_payload import PARAMS, ROW, QLAB, PROTECTED, build, fill_war, protect, annual_formula
 
 
-def test_rows_do_not_overlap_and_stay_below_old_table():
+def test_rows_do_not_overlap_and_start_after_the_header():
+    from macromodel import scenario_layout as SL
+    from sheet.scenarios_quarterly_payload import INDEX_IN, LAST_ROW
     rows = sorted(ROW.values())
-    assert rows[0] > 200 and all(b - a == 4 for a, b in zip(rows, rows[1:]))
+    assert rows[0] == SL.Q_MAIN + 3 and LAST_ROW < SL.EXTRA_FIN - 1
+    by_row = {v: k for k, v in ROW.items()}
+    # four rows per parameter; an index input adds three rows above the levels of the next one
+    assert all(b - a == 4 + (3 if by_row[b] in INDEX_IN else 0) for a, b in zip(rows, rows[1:]))
+
+
+def test_metallurgy_levels_chain_the_quarterly_index():
+    from sheet.scenarios_quarterly_payload import FIRST
+    rows = build()[f"SCENARIOS!A{FIRST}:O{max(ROW.values()) + 3}"]
+    r = ROW["MET"]
+    lvl = rows[r - FIRST]
+    assert lvl[2] == 100 and lvl[3] == f"=C{r}*(1+D{r - 3}/100)" and lvl[12] == f"=L{r}*(1+M{r - 3}/100)"
+    assert "кв/кв" in rows[r - 3 - FIRST][1] and rows[r + 3 - FIRST][3] == f"=B8_CAPACITY!D{RL.ACT['MET']}"
 
 
 def test_annual_cells_are_formulas_over_their_quarters():
