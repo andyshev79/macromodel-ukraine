@@ -1,4 +1,5 @@
 """Quarterly SCENARIOS block: annual cells are formulas over the quarters, and the fill follows the ceasefire quarter."""
+from sheet import recovery_layout as RL
 from sheet.scenarios_quarterly_payload import PARAMS, ROW, QLAB, PROTECTED, build, fill_war, protect, annual_formula
 
 
@@ -12,7 +13,10 @@ def test_annual_cells_are_formulas_over_their_quarters():
     for code, ar, *_ in PARAMS:
         cells = out[f"SCENARIOS!C{ar}:K{ar}"][0]
         assert all(c.startswith("=") for c in cells)
-        assert str(ROW[code]) in cells[0]
+        if code in RL.IND:  # metallurgy and ports: annual = average of the after-recovery path in B8_CAPACITY
+            assert f"B8_CAPACITY!C{RL.EFF_ROWS[code][0]}" in cells[0]
+        else:
+            assert str(ROW[code]) in cells[0]
 
 
 def test_2026_average_weights_first_half_twice():

@@ -22,6 +22,8 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 import json
 import sys
 
+from sheet import recovery_layout as RL
+
 FIRST = 202
 QLAB = ["2026Q3", "2026Q4"] + [f"{y}Q{q}" for y in (2027, 2028) for q in (1, 2, 3, 4)]
 QCOLS = "DEFGHIJKLM"  # 2026Q3..2028Q4 in the new block; C = first half 2026
@@ -89,15 +91,15 @@ OLD_Q = {17: (43, "avg"), 20: (40, "fin"), 22: (94, "flow"), 23: (98, "flow"), 3
 OLD_YC = {2026: ("C", "D"), 2027: ("E", "H"), 2028: ("I", "L")}
 
 
-def annual_formula(agg: str, r: int, y: int) -> str:
+def annual_formula(agg: str, r: int, y: int, sh: str = "") -> str:
     c0, c1 = YCOLS[y]
     if agg == "year":
-        return f"=IF({c0}{r}=\"\";\"\";{c0}{r})"
+        return f"=IF({sh}{c0}{r}=\"\";\"\";{sh}{c0}{r})"
     if agg == "end" or (agg == "q4" and y == 2026):
-        return f"={c1}{r}"
+        return f"={sh}{c1}{r}"
     if y == 2026:
-        return f"=(2*C{r}+D{r}+E{r})/4"
-    return f"=AVERAGE({c0}{r}:{c1}{r})"
+        return f"=(2*{sh}C{r}+{sh}D{r}+{sh}E{r})/4"
+    return f"=AVERAGE({sh}{c0}{r}:{c1}{r})"
 
 
 def old_annual_formula(agg: str, r: int, y: int) -> str:
@@ -124,7 +126,7 @@ def build() -> dict:
         for k, sc in enumerate(SC_NAMES):
             rows.append([f"{name} — {sc}", unit] + [""] * 11 + [AGG_TEXT[agg] if k == 0 else "", note if k == 0 else ""])
         cols = ["C", "F", "J"] if agg == "year" else ["C"] + list(QCOLS)
-        act = {c: choose(c, r) for c in cols}
+        act = {c: (f"=B8_CAPACITY!{c}{RL.ACT[code]}" if code in RL.EFF_ROWS else choose(c, r)) for c in cols}
         rows.append([f"{name} — активный", unit] + [act.get(c, "") for c in "CDEFGHIJKLM"] + ["", ""])
     out[f"SCENARIOS!A{FIRST}:O{LAST_ROW}"] = rows
     # labels in the input rows are written above; values come only with --inputs, so blank them out of this range
@@ -136,6 +138,9 @@ def build() -> dict:
     # the annual table: formulas over the quarters
     for code, ar, *_rest in PARAMS:
         agg, r = _rest[2], ROW[code]
+        if code in RL.EFF_ROWS:  # metallurgy and ports: the path after the recovery limits (B8_CAPACITY section 3)
+            out[f"SCENARIOS!C{ar}:K{ar}"] = [[annual_formula(agg, e, y, "B8_CAPACITY!") for e in RL.EFF_ROWS[code] for y in YEARS]]
+            continue
         out[f"SCENARIOS!C{ar}:K{ar}"] = [[annual_formula(agg, r + k, y) for k in range(3) for y in YEARS]]
     for ar, (r, agg) in OLD_Q.items():
         out[f"SCENARIOS!C{ar}:K{ar}"] = [[old_annual_formula(agg, r + k, y) for k in range(3) for y in YEARS]]

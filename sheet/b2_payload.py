@@ -9,6 +9,10 @@ import sys
 from macromodel.blocks.demand import COMPONENTS, coef_table, peace_coefs, link_other_to_consumption, real_levels_q, regressors
 from macromodel.blocks.real_sector import annual_growth
 from macromodel.blocks.shocks import SHOCK_ROW, estimated
+from sheet import recovery_layout as RL
+from sheet import recovery_payload as REC
+
+B8Y = dict(zip("DEFG", "NOPQ"))  # B2 annual columns -> year columns of B8_CAPACITY section 3
 
 COEF_FIRST = 23  # B1 uses COEFS rows 5-22
 LAST_COL = 53  # BA = 2026Q2, last actual quarter
@@ -127,9 +131,10 @@ eqs = {
              lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40"
                           f"+COEFS!$E${GFCF_MET_ROW}*(B1_REAL!{c}$16-B1_REAL!{p}$16)+" + peace_y(c).format(r=PI)),
     "EXP": (f"агро ({AGRO_SH_TXT}) × реальный агроэкспорт B10 + остальное × (−3,1 + 0,28 (доля, что следует за уровнем портов к 2025) + "
-            + f"{estimated()['MET_X'][0]:.2f}".replace(".", ",") + " × изменение загрузки металлургии)",
+            + f"{estimated()['MET_X'][0]:.2f}".replace(".", ",") + " × изменение загрузки металлургии + руда на экспорт после прекращения огня, B8_CAPACITY раздел 3)",
             lambda c, p: f"={AGRO_SH}*B10_AGRO!{c}41+(1-{AGRO_SH})*({C('EXP','const')}+{port_g(C('EXP','PORTS'), c, p)}"
-                         f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16))"),
+                         f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16)"
+                         f"+COEFS!$E${REC.CR['REC_ORE_XEXP']}*(B8_CAPACITY!{B8Y[c]}{RL.ACT['ORE_XTRA']}-B8_CAPACITY!{B8Y[p]}{RL.ACT['ORE_XTRA']}))"),
     "IMP": (f"оборонный ({pnum('GDPE_IMP', 'DEF_SH')}) × рост реальных расходов на оборону + гражданский × "
             f"({kv('IMP', 'const')} + {kv('IMP', 'DOM_DEMAND')} × рост внутреннего спроса)",
             lambda c, p: f"={P('GDPE_IMP','DEF_SH')}*{c}$15+(1-{P('GDPE_IMP','DEF_SH')})*"
