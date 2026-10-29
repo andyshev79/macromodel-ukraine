@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from macromodel import scenario_layout as SL
 from macromodel.blocks.real_sector import (SECTORS, annual_growth, coef_table, manuf_coef_rows, manuf_data, other_coef_rows, pub_prices,
                                           other_parts, other_parts_levels, real_levels_q,
                                           trade_coef_rows, trade_fit)
@@ -77,10 +78,10 @@ text = [
 ]
 drv = [
     ("HARVEST", "Урожай шести основных культур", "млн т", "=B10_AGRO!D25", None, "B10_AGRO строка 25 (по культурам)"),
-    ("PORTS", "Пропускная способность портов", "млн т в год", 82.2, 19, "USPA"),
-    ("CAP", "Доступная мощность энергосистемы в пик", "ГВт", 15, 18, "DiXi: перед зимой 2024/25 больше 15 ГВт"),
-    ("EA_GDP", "Рост ВВП еврозоны", "%", 1.4, 28, "Eurostat, приблизительно"),
-    ("DEF", "Расходы на оборону", "% ВВП", 34.4, 21, "Казначейство (функция 0200) / ВВП"),
+    ("PORTS", "Пропускная способность портов", "млн т в год", 82.2, SL.Y["PORTS"], "USPA"),
+    ("CAP", "Доступная мощность энергосистемы в пик", "ГВт", 15, SL.Y["CAP"], "DiXi: перед зимой 2024/25 больше 15 ГВт"),
+    ("EA_GDP", "Рост ВВП еврозоны", "%", 1.4, SL.Y["EA_GDP"], "Eurostat, приблизительно"),
+    ("DEF", "Расходы на оборону", "% ВВП", 34.4, SL.Y["DEF"], "Казначейство (функция 0200) / ВВП"),
 ]
 for code, name, unit, v25, srow, src in drv:
     text.append([code, name, unit, v25] + [f"=B10_AGRO!{c}25" if srow is None else f"=SCENARIOS!{a}{srow}"
@@ -89,7 +90,7 @@ out["B1_REAL!A1:H15"] = text
 # metallurgy utilisation (sheet.shocks_payload). The shock is elasticity × change in utilisation in points
 # of 2025 output: a restart from a low base (15 -> 50) adds 35% of the 2025 output, not +233%
 out["B1_REAL!A16:H16"] = [["MET", "Металлургия: загрузка мощностей", "% от 2025", 100,
-                           "=SCENARIOS!L63", "=SCENARIOS!M63", "=SCENARIOS!N63", "SCENARIOS (отраслевые шоки)"]]
+                           f"=SCENARIOS!L{SL.MET_Y}", f"=SCENARIOS!M{SL.MET_Y}", f"=SCENARIOS!N{SL.MET_Y}", "SCENARIOS (отраслевые шоки)"]]
 MET = lambda s, c, p: f"+COEFS!$E${SHOCK_ROW['MET_' + s]}*({c}$16-{p}$16)"
 # Port-dependent share K of the sector moves with the ports' level against 2025 (D12), the rest does not:
 # growth = ((1 - K) + K * ports / ports 2025) / (same a year ago) - 1. Closing and reopening the ports cancel out,
@@ -102,7 +103,7 @@ ACT = dict(zip("EFG", "LMN"))  # active-scenario columns in SCENARIOS
 CB_CODES = ["C_MET", "C_FOOD", "C_MACH_CIV", "C_OPK", "C_MACH", "C_OTH", "IND_C_BU", "GVA_C_BU", "GVA_C_TD", "C_CHK"]
 CB_ROW = {k: 79 + i for i, k in enumerate(CB_CODES)}
 out[f"COEFS!A{F_REC_ROW}:L{F_REC_ROW}"] = [["GVA_F_REC", "B1", "GVA_F", "REC", 1.0, "", "", "", "калибровка", "", "2026-10-25",
-    "Восстановление: строительство растёт на те же п.п., что ВНОК (SCENARIOS строка 124). Строительство — около "
+    f"Восстановление: строительство растёт на те же п.п., что ВНОК (SCENARIOS строка {SL.PEACE_I}). Строительство — около "
     "половины ВНОК; машины и оборудование в основном импорт. Оценка Claude"]]
 O_CODES = ["MIL_NY", "ADM_N", "DEF_G", "ADM_G", "DEF_NOM_G", "ADM_NOM_G", "DEF_SH", "GVA_O", "O_CHK"]
 O_ROW = {k: 67 + i for i, k in enumerate(O_CODES)}
@@ -110,7 +111,7 @@ OT_CODES = ["OT_TAX", "OT_MKT", "OT_PUB", "OTHER_BU", "OTHER_TD", "OT_CHK"]
 OT_ROW = {k: 93 + i for i, k in enumerate(OT_CODES)}
 PB_CODES = ["PUB_MINW", "PUB_CIV", "PUB_CPI", "PUB_RATE", "PUB_RATE_H", "PUB_FUND", "PUB_REAL", "PUB_CHK", "PUB_FLOOR"]
 PB_ROW = {k: 102 + i for i, k in enumerate(PB_CODES)}
-PUB_SC = 194  # SCENARIOS: education and health pay fund, active columns L:N
+PUB_SC = SL.EDU  # SCENARIOS: education and health pay fund, active columns L:N
 # Trade follows real wages, asymmetric (annual fit, COEFS 226-228; 225 is the last B5 row)
 TR_FIRST = 226
 RW_B4 = 74  # B4_LABOUR RW_ECON: real wage growth without de-shadowing (not new income)
@@ -223,7 +224,7 @@ sec = [["5. Госуправление и оборона (раздел O): об�
        ["Код", "Показатель", "Уравнение / единицы", 2025, 2026, 2027, 2028, "Комментарий"],
        ["MIL_NY", "Численность военных, среднее за год", "тыс. человек, B4_LABOUR строка 17"] +
        [f"={q4(c, 17, 'AVERAGE')}" for c in "DEFG"] +
-       ["сценарий SCENARIOS 110–113; история — оценка (1 млн), Госстат численность не публикует"],
+       [f"сценарий SCENARIOS {SL.LABOUR + 30}–{SL.LABOUR + 33}; история — оценка (1 млн), Госстат численность не публикует"],
        ["ADM_N", "Гражданские работники госуправления", "тыс. человек, среднеучётная (Госстат, раздел O)"] +
        [adm["2025"]] + [adm[y] if y <= ADM_LAST else f"={pc[c]}{r['ADM_N']}*(1+{C('O','ADM_G')}/100)"
                         for c, y in zip("EFG", ["2026", "2027", "2028"])] +
@@ -268,7 +269,7 @@ mv = lambda eq, v: num(next(r["coef"] for r in mc if (r["eq"], r["var"]) == (eq,
 md = manuf_data().loc["2025Q1":"2025Q4"]
 h25 = lambda k: round(float(md[k].mean()), 1)
 R = CB_ROW
-# the peace effect of SCENARIOS row 124 by quarter, averaged over the year (B2_DEMAND section 5)
+# the peace effect of SCENARIOS row SL.PEACE_I by quarter, averaged over the year (B2_DEMAND section 5)
 gfcf_x = lambda c: f"(COEFS!$E$27+B7_MONETARY!{c}40+SUMIF(B2_DEMAND!$H$30:$BK$30;{c}$18;B2_DEMAND!$H$55:$BK$55)/4)"
 def ind_lvl(c):
     """Level of the bottom-up manufacturing index in year column c (2025 = 1): blocks weighted at 2025 shares.

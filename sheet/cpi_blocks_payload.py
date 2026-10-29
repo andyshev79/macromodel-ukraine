@@ -8,6 +8,7 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators). --coef
 import json
 import sys
 
+from macromodel import scenario_layout as SL
 from macromodel.blocks import cpi_blocks as B
 from macromodel.blocks.shocks import FUEL_ROW, SHOCK_ROW, TARIFF_ROW
 
@@ -19,7 +20,7 @@ ANCH4 = ["AV", "AW", "AX", "AY"] + ANCH[:8]  # same quarter last year
 SCQ = {c: s for c, s in zip(COLS[2:], "CDEFGHIJKL")}  # SCENARIOS quarter columns (2026Q3..2028Q4)
 YEAR_COL = {"2026": "E", "2027": "F", "2028": "G"}  # B3 annual columns
 SC_YEAR = {"2026": "L", "2027": "M", "2028": "N"}  # SCENARIOS active annual columns
-BRENT_ROW = 78
+BRENT_ROW = SL.BRENT
 PRESS_2026Q3 = {"CORE": 8.8, "RAW": 6.7, "ADM": 13.6, "FUEL": 46.2}  # NBU, September 2026 y/y
 BRENT_2025 = [75.8, 68.0, 69.0, 63.6]
 
@@ -53,12 +54,12 @@ def harv(c):
     y = int(q[:4]) if q[-1] in "34" else int(q[:4]) - 1
     if y == 2025:
         return round(float(B.harvest_growth()["2025"]), 1)
-    p = "77,6" if y == 2026 else f"SCENARIOS!{SC_YEAR[str(y - 1)]}24"
-    return f"=(SCENARIOS!{SC_YEAR[str(y)]}24/{p}-1)*100"
+    p = "77,6" if y == 2026 else f"SCENARIOS!{SC_YEAR[str(y - 1)]}{SL.Y['HARVEST']}"
+    return f"=(SCENARIOS!{SC_YEAR[str(y)]}{SL.Y['HARVEST']}/{p}-1)*100"
 
 
 def tariffs(c):
-    """Tariff hikes of this quarter and the three before it (SCENARIOS row 57 starts at 2026Q3 = column F)."""
+    """Tariff hikes of this quarter and the three before it (SCENARIOS row TARIFF_ROW: C = 2026Q3 = B3 column F)."""
     i = COLS.index(c)
     cols = [SCQ[COLS[j]] for j in range(max(2, i - 3), i + 1)]
     return f"SUM(SCENARIOS!{cols[0]}{TARIFF_ROW}:{cols[-1]}{TARIFF_ROW})"
@@ -84,7 +85,7 @@ rows = [
     + [fact("FUEL", i) for i in range(FACT)]
     + [f"=IF(SCENARIOS!{SCQ[c]}{FUEL_ROW}<>\"\";SCENARIOS!{SCQ[c]}{FUEL_ROW};"
        f"{C('FUEL', 'const')}+{C('FUEL', 'BRENT')}*{c}43+{C('FUEL', 'FX')}*{c}40)" for c in fc]
-    + [f"задано в SCENARIOS строка {FUEL_ROW} — берётся оно, иначе уравнение"],
+    + [f"задано в SCENARIOS (ввод кв/кв строка {SL.FUEL_QQ}, итог г/г строка {FUEL_ROW}) — берётся оно, иначе уравнение"],
     ["RAW", B.NAMES["RAW"], f"{kv('RAW', 'const')} + {kv('RAW', 'RAW_L1')} × прошлый квартал + {kv('RAW', 'FUEL_L1')} × топливо прошлого квартала "
                             f"{kv('RAW', 'HARV')} × рост урожая"]
     + [fact("RAW", i) for i in range(FACT)]
@@ -94,7 +95,7 @@ rows = [
     + [fact("ADM", i) for i in range(FACT)]
     + [f"={C('ADM', 'const')}+{C('ADM', 'ADM_L1')}*{prev(c)}47" for c in fc] + ["акцизы на табак и алкоголь, проезд, связь"],
     ["ADM_T", "Вклад повышения тарифов ЖКУ", "доля ЖКУ в админценах × повышения за 4 квартала", 0, 0]
-    + [f"={C('ADM', 'TARIFF')}*{tariffs(c)}" for c in COLS[2:]] + ["SCENARIOS, строка 57"],
+    + [f"={C('ADM', 'TARIFF')}*{tariffs(c)}" for c in COLS[2:]] + [f"SCENARIOS, строка {TARIFF_ROW}"],
     ["ADM", B.NAMES["ADM"], "строка 47 + строка 48"] + [fact("ADM", i) for i in range(FACT)]
     + [f"={c}47+{c}48" for c in fc],
     ["CORE", B.NAMES["CORE"], f"{kv('CORE', 'const')} + {kv('CORE', 'FX')} × девальвация + {kv('CORE', 'WAGE')} × зарплата "
@@ -107,8 +108,8 @@ rows = [
     + [f"={C('W', 'const')}+{C('W', 'CORE')}*{c}50+{C('W', 'RAW')}*{c}46+{C('W', 'ADM')}*{c}49+{C('W', 'FUEL')}*{c}45"
        + ("" if c in COLS[:FACT] else f"+${YEAR_COL[year(c)]}$34") for c in COLS]
     + ["2026Q1–Q3: проверка весов на факте"],
-    ["CPI_Q", "ИПЦ в модели", "факт; задано в SCENARIOS строка 51; иначе строка 51 этого листа", "=ANCHORS!AZ10", "=ANCHORS!BA10"]
-    + [f"=IF(SCENARIOS!{SCQ[c]}51<>\"\";SCENARIOS!{SCQ[c]}51;{c}51)" for c in COLS[2:]] + ["идёт в ANCHORS, строка 10"],
+    ["CPI_Q", "ИПЦ в модели", f"факт; задано в SCENARIOS строка {SL.CPI_Q}; иначе строка 51 этого листа", "=ANCHORS!AZ10", "=ANCHORS!BA10"]
+    + [f"=IF(SCENARIOS!{SCQ[c]}{SL.CPI_Q}<>\"\";SCENARIOS!{SCQ[c]}{SL.CPI_Q};{c}51)" for c in COLS[2:]] + ["идёт в ANCHORS, строка 10"],
     [""],
     ["5. Вклады блоков в ИПЦ, п.п."],
     ["Код", "Блок", ""] + QUARTERS,

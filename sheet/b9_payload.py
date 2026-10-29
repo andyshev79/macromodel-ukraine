@@ -5,6 +5,7 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 import json
 import sys
 
+from macromodel import scenario_layout as SL
 from macromodel.blocks.construction import COEF_FIRST, KINDS, ROW, area_growth, coef_rows, fact_ytd, history, kind_facts
 
 num = lambda v, d=1: f"{v:.{d}f}".replace(".", ",").replace("-", "−")
@@ -31,7 +32,7 @@ out[f"COEFS!A{COEF_FIRST}:L{COEF_FIRST + len(rows) - 1}"] = [
      "" if r["r2"] is None else float(r["r2"]), "2026-10-26", r["note"]] for r in rows]
 
 # SCENARIOS: financing of reconstruction, bn USD (base / pessimistic / optimistic), active columns L:N
-SC_FIRST = 128
+SC_FIRST = SL.RECON_FIRST
 FIN_ROW = SC_FIRST + 3
 fin = [2, 6, 8, 2, 2, 5, 3, 8, 10]
 out[f"SCENARIOS!A{SC_FIRST}:O{SC_FIRST + 4}"] = [
@@ -42,7 +43,7 @@ out[f"SCENARIOS!A{SC_FIRST}:O{SC_FIRST + 4}"] = [
     [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a}{FIN_ROW};{b}{FIN_ROW};{c}{FIN_ROW})" for a, b, c in ["CFI", "DGJ", "EHK"]] +
     ["Оценка Claude: Ukraine Facility (инвестиционная часть), ЕБРР, ЕИБ, Всемирный банк, частные проекты под страхование. "
      "Потребность по RDNA4 около 50 млрд USD в год"],
-    ["Как считается: B9 сравнивает эти деньги с объёмом восстановления в сценарии (SCENARIOS строка 124 × ВНОК прошлого года). "
+    [f"Как считается: B9 сравнивает эти деньги с объёмом восстановления в сценарии (SCENARIOS строка {SL.PEACE_I} × ВНОК прошлого года). "
      "Если денег меньше — ВНИМАНИЕ: восстановление в сценарии не обеспечено финансированием."],
 ]
 
@@ -65,7 +66,7 @@ text = [
     [f"=(B1_REAL!{c}15/B1_REAL!{pc[c]}15)*(1+B1_REAL!{pc[c]}31/100)*100-100" for c in "EFG"] +
     ["доля в ВВП × ВВП прошлого года (без циклической ссылки)"],
     ["REC_PP", "Восстановление", "п.п. к росту ВНОК", 0] + [f"=SUMIF(B2_DEMAND!$H$30:$BK$30;{c}$10;B2_DEMAND!$H$55:$BK$55)/4" for c in "EFG"] +
-    ["SCENARIOS строка 124 по кварталам после прекращения огня (B2_DEMAND раздел 5), среднее за год"],
+    [f"SCENARIOS строка {SL.PEACE_I} по кварталам после прекращения огня (B2_DEMAND раздел 5), среднее за год"],
     ["RATE_F", "Влияние ставки на строительство", "п.п.", ""] + [f"=B7_MONETARY!{c}41" for c in "EFG"] + ["B7_MONETARY"],
     ["REC_FIN", "Деньги на восстановление", "млрд USD", ""] + [f"=SCENARIOS!{ACT[c]}{FIN_ROW}" for c in "EFG"] +
     [f"SCENARIOS строка {FIN_ROW}"],
@@ -109,7 +110,7 @@ text = [
     [f"={c}13/100*{pc[c]}16" for c in "EFG"] + [""],
     ["REC_CHK", "Восстановление обеспечено деньгами", "нужно ≤ есть", ""] +
     [f"=IF({c}31<={c}15;\"OK\";\"ВНИМАНИЕ: не хватает \"&ROUND({c}31-{c}15;1)&\" млрд USD\")" for c in "EFG"] +
-    ["если не хватает — снизить SCENARIOS строку 124 или поднять финансирование"],
+    [f"если не хватает — снизить SCENARIOS строку {SL.PEACE_I} или поднять финансирование"],
     ["LAB_NEED", "Нужно дополнительных рабочих", "занятые × ((1 + рост) / (1 + производительность) − 1), тыс.", ""] +
     [f"={C('F_LAB_BASE')}*((1+{c}25/100)/(1+{C('F_LAB_PROD')}/100)-1)" for c in "EFG"] +
     ["база — занятые 2025 (оценка); упрощённо от уровня 2025"],

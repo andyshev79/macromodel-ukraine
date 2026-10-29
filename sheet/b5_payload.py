@@ -6,6 +6,7 @@ The exchange rate rule uses last year's reserves, so B2-B5 have no circular refe
 import json
 import sys
 
+from macromodel import scenario_layout as SL
 from macromodel.blocks import external as X
 from macromodel.blocks.external import annual, coef_table
 from macromodel.blocks.real_sector import quarterly
@@ -42,7 +43,7 @@ LAYOUT = [("T4", 43), ("H4", 44), ("FXQ_RULE", 45), ("FXQ_AVG", 46), ("FXQ_EOP",
 QROW = dict(LAYOUT)
 BOP_FIRST = 233
 BOP_ROW = {"FLOOR_M": BOP_FIRST, "FX_CRISIS": BOP_FIRST + 1}
-XF = 294  # SCENARIOS: extra financing partners are ready to give, Base / Pess / Opt / active, columns C:M as rows 202-292
+XF = SL.EXTRA_FIN  # SCENARIOS: extra financing partners are ready to give, Base / Pess / Opt / active, columns C:M as the main block
 q4 = lambda c, code, last=False: (f"{QC[Q0[YR[c]] + 3]}{QROW[code]}" if last else f"{QC[Q0[YR[c]]]}{QROW[code]}:{QC[Q0[YR[c]] + 3]}{QROW[code]}")
 YR = {v: k for k, v in YC.items()}
 hq = quarterly()
@@ -96,11 +97,11 @@ rows = [
     ["Код", "Показатель", "Единицы", 2025, 2026, 2027, 2028, "Откуда"],
     ["EXPR", "Рост реального экспорта", "%"] + [f"=B2_DEMAND!{c}23" for c in "DEFG"] + ["B2_DEMAND"],
     ["IMPR", "Рост реального импорта", "%"] + [f"=B2_DEMAND!{c}24" for c in "DEFG"] + ["B2_DEMAND"],
-    ["WHEAT", "Цена пшеницы", "USD/т", 230] + [f"=SCENARIOS!{s}25" for s in "LMN"] + ["SCENARIOS"],
-    ["STEEL", "Цена стали (заготовка)", "USD/т", 445] + [f"=SCENARIOS!{s}26" for s in "LMN"] + ["SCENARIOS"],
+    ["WHEAT", "Цена пшеницы", "USD/т", 230] + [f"=SCENARIOS!{s}{SL.Y['WHEAT']}" for s in "LMN"] + ["SCENARIOS"],
+    ["STEEL", "Цена стали (заготовка)", "USD/т", 445] + [f"=SCENARIOS!{s}{SL.Y['STEEL']}" for s in "LMN"] + ["SCENARIOS"],
     ["PX", "Рост цен экспортного сырья", "%", round(float(a["PX"]), 1)] + EFG(lambda c, p: f"=(({c}13/{p}13-1)+({c}14/{p}14-1))/2*100") + ["среднее пшеницы и стали"],
     ["TTF_G", "Рост цены газа TTF", "%"] + [f"=B3_PRICES!{c}14" for c in "DEFG"] + ["B3_PRICES"],
-    ["FIN", "Внешнее финансирование бюджета", "млн USD", round(float(a["FIN_RECEIVED_USD"]))] + [f"=SCENARIOS!{s}20" for s in "LMN"] + ["SCENARIOS (обещано)"],
+    ["FIN", "Внешнее финансирование бюджета", "млн USD", round(float(a["FIN_RECEIVED_USD"]))] + [f"=SCENARIOS!{s}{SL.Y['FIN']}" for s in "LMN"] + ["SCENARIOS (обещано)"],
     ["HICP", "Инфляция еврозоны", "%"] + [f"=B3_PRICES!{c}15" for c in "DEFG"] + ["B3_PRICES"],
     ["CPI", "ИПЦ Украины", "%"] + [f"=B3_PRICES!{c}20" for c in "DEFG"] + ["B3_PRICES"],
     ["STEEL_IMP", "Доп. импорт проката вместо своего (металлурги стоят)", "млн USD", 0]
@@ -164,7 +165,7 @@ out[f"COEFS!A{Q_FIRST}:L{Q_FIRST + len(qcoefs) - 1}"] = [
      "" if not r["se"] else round(r["coef"] / r["se"], 1), r["period"], r["method"], "" if r["r2"] is None else r["r2"],
      "2026-10-26", r["note"]] for r in qcoefs]
 
-EUR_SC = 199  # SCENARIOS: EUR/USD by scenario, active columns L:N
+EUR_SC = SL.EURUSD  # SCENARIOS: EUR/USD by scenario, active columns L:N
 R = QROW
 year = lambda i: QS[i][:4]
 pc = lambda i, k=1: QC[i - k]
@@ -197,7 +198,7 @@ put("FXQ_RULE", line("FXQ_RULE", "Девальвация гривны по пр�
                      f"+COEFS!$E${BOP_ROW['FX_CRISIS']}*{PY[year(i)]}$37)/100)^(1/4)-1)*100"),
                      "до 2026Q3 — факт; дальше правило, как в годовом разделе 3: инфляция и резервы с лагом в год"))
 put("FXQ_AVG", line("FXQ_AVG", "Курс UAH/USD, средний", "грн за 1 USD; ANCHORS строка 12", lambda i, c: f"=ANCHORS!{AC[QS[i]]}12",
-                    "прогноз в ANCHORS = ориентир SCENARIOS строка 52, иначе прошлый квартал × (1 + правило)"))
+                    f"прогноз в ANCHORS = ориентир SCENARIOS строка {SL.FX_Q}, иначе прошлый квартал × (1 + правило)"))
 put("FXQ_EOP", line("FXQ_EOP", "Курс UAH/USD, конец квартала", "средний × (средний / прошлый средний)^0,5",
                     lambda i, c: f"=ANCHORS!{AC[QS[i]]}13" if i <= 7 else f"={c}{R['FXQ_AVG']}*({c}{R['FXQ_AVG']}/{pc(i)}{R['FXQ_AVG']})^0,5",
                     "до 2026Q4 — ANCHORS (факт и введённое значение); дальше идёт в ANCHORS строка 13"))
@@ -264,7 +265,7 @@ put("OTHERQ", line("OTHERQ", "Прочие потоки", f"COEFS BOP_OTHER / 4 
                    lambda i, c: other_hist[QS[i]] if i <= FACT_TRADE else
                    f"={C('BOP','OTHER')}/4",
                    "2026Q3: резервы известны, потоки ещё нет — неизвестным считается транш (ANCHORS строка 29)"))
-put("FINQ", line("FINQ", "Получено внешнего финансирования", "ANCHORS строка 29 (транши SCENARIOS строки 40–46)",
+put("FINQ", line("FINQ", "Получено внешнего финансирования", f"ANCHORS строка 29 (транши SCENARIOS строки {SL.FIN_Q}–{SL.FIN_Q + 6})",
                  lambda i, c: f"=ANCHORS!{AC[QS[i]]}29"))
 put("NEEDQ", line("NEEDQ", "Потребность во внешнем финансировании", "−(сальдо + переводы + ПИИ + прочие)",
                   lambda i, c: f"=-({c}{R['TBQ']}+{c}{R['REMQ']}+{c}{R['FDIQ']}+{c}{R['OTHERQ']})", "идёт в ANCHORS строка 28"))
@@ -331,7 +332,7 @@ put("NOTE7", ["Как читать: резервы не уходят ниже п
               "считается (иначе круговая ссылка): это узкое место показано проверкой."])
 out[f"B5_EXTERNAL!A43:T{R['NOTE7']}"] = sec
 
-# EUR/USD by scenario (SCENARIOS rows 196-199): written only without --coefs
+# EUR/USD by scenario (SCENARIOS rows EUR_SC - 3 .. EUR_SC): written only without --coefs
 EUR = {"Base": [1.15, 1.15, 1.15], "Pess": [1.15, 1.10, 1.08], "Opt": [1.15, 1.18, 1.20]}
 out[f"SCENARIOS!A{EUR_SC - 3}:O{EUR_SC}"] = [
     ["Курс EUR/USD (B5_EXTERNAL раздел 4)"],

@@ -7,6 +7,7 @@ import json
 import sys
 
 from macromodel import quarterly
+from macromodel import scenario_layout as SL
 from macromodel.blocks.prices import annual, coef_table
 
 COEF_FIRST = 36  # B1 uses COEFS rows 5-22, B2 rows 23-35
@@ -74,9 +75,9 @@ top = [
      "2026: курс из ANCHORS. 2027–2028 — из B5_EXTERNAL (инфляционный разрыв и резервы)"],
     ["WAGE", "Рост номинальной зарплаты", "%", round(float(a["WAGE"]), 1), "=B4_LABOUR!E30", "=B4_LABOUR!F30", "=B4_LABOUR!G30",
      "из B4_LABOUR (с учётом факта)"],
-    ["TTF", "Цена газа TTF", "EUR/МВт·ч", 36.5, "=SCENARIOS!L27", "=SCENARIOS!M27", "=SCENARIOS!N27", "из SCENARIOS"],
+    ["TTF", "Цена газа TTF", "EUR/МВт·ч", 36.5, *[f"=SCENARIOS!{s}{SL.Y['TTF']}" for s in "LMN"], "из SCENARIOS"],
     ["TTF_G", "Рост цены газа TTF", "%", round(float(a["TTF"]), 1), "=(E13/D13-1)*100", "=(F13/E13-1)*100", "=(G13/F13-1)*100", "из строки выше"],
-    ["HICP", "Инфляция еврозоны", "%", float(a["HICP"]), "=SCENARIOS!L29", "=SCENARIOS!M29", "=SCENARIOS!N29", "из SCENARIOS"],
+    ["HICP", "Инфляция еврозоны", "%", float(a["HICP"]), *[f"=SCENARIOS!{s}{SL.Y['HICP']}" for s in "LMN"], "из SCENARIOS"],
     [""],
     ["2. Цены, средний рост за год, %"],
     ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],

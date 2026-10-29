@@ -9,8 +9,11 @@ becomes formulas over the quarters, so every annual block works as before:
 
 New block layout (rows from FIRST): A name, B units, C first half 2026 (fact or estimate), D:M = 2026Q3..2028Q4,
 N how the year is built, O comment. Four rows per parameter: Base, Pessimistic, Optimistic, active (CHOOSE by C3).
-Parameters that already had quarterly rows (financing 40-42, strikes 43-45, people flows 94-105) stay where they are;
+Parameters that already had quarterly rows (financing, strikes, people flows) stay in their own blocks;
 their annual rows become formulas over them.
+
+Metallurgy (2026-10-29, Andrey): the input is the production index, % to the previous quarter (three rows above the
+levels); the level rows (% of 2025) are formulas: previous quarter x (1 + index / 100). B8_CAPACITY reads the levels.
 
 --inputs FILE: also write the starting values (a JSON snapshot of the current sheet), filled by the logic of the
 ceasefire quarter (row 16): before it the war level, from it the rest of the year so that the year averages
@@ -22,9 +25,10 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 import json
 import sys
 
+from macromodel import scenario_layout as SL
 from sheet import recovery_layout as RL
 
-FIRST = 202
+FIRST = SL.Q_MAIN
 QLAB = ["2026Q3", "2026Q4"] + [f"{y}Q{q}" for y in (2027, 2028) for q in (1, 2, 3, 4)]
 QCOLS = "DEFGHIJKLM"  # 2026Q3..2028Q4 in the new block; C = first half 2026
 YEARS = (2026, 2027, 2028)
@@ -38,35 +42,45 @@ choose = lambda c, r: f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{c}{r};{c}{r + 1};{c}{r
 # rules: war_up / war_down follow the ceasefire quarter, flat = the annual value in every quarter,
 # year = one value per year (annual-only data)
 PARAMS = [
-    ("CAP", 18, "Доступная мощность энергосистемы в пик", "ГВт", "avg", "war_up",
+    ("CAP", SL.Y["CAP"], "Доступная мощность энергосистемы в пик", "ГВт", "avg", "war_up",
      "До квартала прекращения огня — уровень войны, дальше — восстановление; B1 считает энергетику, добычу, переработку и услуги по кварталам"),
-    ("PORTS", 19, "Пропускная способность морских портов", "млн т в год (в годовом выражении)", "avg", "war_up",
+    ("PORTS", SL.Y["PORTS"], "Пропускная способность морских портов", "млн т в год (в годовом выражении)", "avg", "war_up",
      "1 пол. 2026 — факт 42,4 млн т × 2 (GMK Center); B1 считает транспорт и добычу по кварталам"),
-    ("DEF", 21, "Расходы на оборону", "% ВВП", "avg", "war_down", "1 пол. 2026 — факт 35,7% (Казначейство, функция 0200)"),
-    ("WHEAT", 25, "Цена пшеницы", "USD/т", "avg", "flat", "Всемирный банк, CMO (HRW)"),
-    ("STEEL", 26, "Цена стали (заготовка)", "USD/т", "avg", "flat", "НБУ, прогноз заготовки FOB Украина"),
-    ("TTF", 27, "Цена газа TTF", "EUR/МВт·ч", "avg", "flat", "ЕЦБ, прогноз сентябрь 2026"),
-    ("EA_GDP", 28, "Рост ВВП еврозоны", "%", "avg", "flat", "ЕЦБ: годовые прогнозы, по кварталам — то же значение"),
-    ("HICP", 29, "Инфляция еврозоны", "%", "avg", "flat", "ЕЦБ: годовые прогнозы"),
-    ("FED", 30, "Ставка ФРС", "%, конец квартала", "end", "flat", "ФРС SEP; год = 4 кв."),
-    ("SH_MIGR", 32, "Доля украинских мигрантов в рабочей силе", "доля 0–1", "year", "year", "Только годовая оценка"),
-    ("SH_GUEST", 33, "Доля иностранных рабочих в рабочей силе", "доля 0–1", "year", "year", "Только годовая оценка"),
-    ("MET", 63, "Металлургия: загрузка мощностей", "% от уровня 2025", "avg", "war_up",
-     "1 пол. 2026 — факт: промпроизводство 24–25 на уровне 2025 (−2,4% и +4,9% г/г); B1 считает металлургию по кварталам"),
-    ("DESHADOW", 71, "Детенизация зарплат", "п.п. к росту средней зарплаты", "year", "year", "Только годовая оценка"),
-    ("BRENT", 78, "Цена нефти Brent", "USD/барр.", "q4", "flat", "2026 в годовой таблице — 4 кв. (как раньше)"),
-    ("PEACE_C", 123, "Эффект мира: снижение нормы сбережений", "п.п. к росту потребления домохозяйств", "year", "year",
+    ("DEF", SL.Y["DEF"], "Расходы на оборону", "% ВВП", "avg", "war_down", "1 пол. 2026 — факт 35,7% (Казначейство, функция 0200)"),
+    ("WHEAT", SL.Y["WHEAT"], "Цена пшеницы", "USD/т", "avg", "flat", "Всемирный банк, CMO (HRW)"),
+    ("STEEL", SL.Y["STEEL"], "Цена стали (заготовка)", "USD/т", "avg", "flat", "НБУ, прогноз заготовки FOB Украина"),
+    ("TTF", SL.Y["TTF"], "Цена газа TTF", "EUR/МВт·ч", "avg", "flat", "ЕЦБ, прогноз сентябрь 2026"),
+    ("EA_GDP", SL.Y["EA_GDP"], "Рост ВВП еврозоны", "%", "avg", "flat", "ЕЦБ: годовые прогнозы, по кварталам — то же значение"),
+    ("HICP", SL.Y["HICP"], "Инфляция еврозоны", "%", "avg", "flat", "ЕЦБ: годовые прогнозы"),
+    ("FED", SL.Y["FED"], "Ставка ФРС", "%, конец квартала", "end", "flat", "ФРС SEP; год = 4 кв."),
+    ("SH_MIGR", SL.Y["SH_MIGR"], "Доля украинских мигрантов в рабочей силе", "доля 0–1", "year", "year", "Только годовая оценка"),
+    ("SH_GUEST", SL.Y["SH_GUEST"], "Доля иностранных рабочих в рабочей силе", "доля 0–1", "year", "year", "Только годовая оценка"),
+    ("MET", SL.MET_Y, "Металлургия: уровень из индекса", "% от уровня 2025 (расчёт)", "avg", "war_up",
+     "Не вводить: прошлый квартал × (1 + индекс / 100). 1 пол. 2026 — факт: промпроизводство 24–25 на уровне 2025 "
+     "(−2,4% и +4,9% г/г). Это верхняя граница пути; после прекращения огня B8_CAPACITY ограничивает её рынками и разрушениями"),
+    ("DESHADOW", SL.DESHADOW, "Детенизация зарплат", "п.п. к росту средней зарплаты", "year", "year", "Только годовая оценка"),
+    ("BRENT", SL.BRENT, "Цена нефти Brent", "USD/барр.", "q4", "flat", "2026 в годовой таблице — 4 кв. (как раньше)"),
+    ("PEACE_C", SL.PEACE_C, "Эффект мира: снижение нормы сбережений", "п.п. к росту потребления домохозяйств", "year", "year",
      "Годовая добавка в B2_DEMAND"),
-    ("PEACE_I", 124, "Эффект мира: восстановление", "п.п. к росту инвестиций (ВНОК)", "year", "year", "Годовая добавка в B2_DEMAND"),
-    ("RECON", 131, "Деньги на восстановление", "млрд USD в год", "year", "year", "Годовая сумма для B9_CONSTRUCTION"),
-    ("SUNOIL", 137, "Цена подсолнечного масла FOB Чёрное море", "USD/т", "avg", "flat", "B10_AGRO"),
-    ("WEATHER", 138, "Погода: отклонение урожайности от среднего", "%", "year", "year", "Урожай — один раз в год"),
-    ("AREA", 139, "Посевная площадь к 2026", "%", "year", "year", "Урожай — один раз в год"),
-    ("EDU", 194, "Фонд оплаты труда образования и здравоохранения", "% рост за год", "year", "year", "Годовой бюджет"),
-    ("EURUSD", 199, "EUR/USD, средний", "долларов за 1 евро", "q4", "flat", "2026 в годовой таблице — 4 кв. (как раньше)"),
+    ("PEACE_I", SL.PEACE_I, "Эффект мира: восстановление", "п.п. к росту инвестиций (ВНОК)", "year", "year", "Годовая добавка в B2_DEMAND"),
+    ("RECON", SL.RECON, "Деньги на восстановление", "млрд USD в год", "year", "year", "Годовая сумма для B9_CONSTRUCTION"),
+    ("SUNOIL", SL.SUNOIL, "Цена подсолнечного масла FOB Чёрное море", "USD/т", "avg", "flat", "B10_AGRO"),
+    ("WEATHER", SL.WEATHER, "Погода: отклонение урожайности от среднего", "%", "year", "year", "Урожай — один раз в год"),
+    ("AREA", SL.AREA, "Посевная площадь к 2026", "%", "year", "year", "Урожай — один раз в год"),
+    ("EDU", SL.EDU, "Фонд оплаты труда образования и здравоохранения", "% рост за год", "year", "year", "Годовой бюджет"),
+    ("EURUSD", SL.EURUSD, "EUR/USD, средний", "долларов за 1 евро", "q4", "flat", "2026 в годовой таблице — 4 кв. (как раньше)"),
 ]
-ROW = {p[0]: FIRST + 3 + 4 * i for i, p in enumerate(PARAMS)}  # first (Base) row of each parameter
-LAST_ROW = FIRST + 3 + 4 * len(PARAMS) - 1
+INDEX_IN = {"MET"}  # parameters entered as an index to the previous quarter: three input rows above the levels
+IDX_NAME = {"MET": "Металлургия: индекс производства к прошлому кварталу"}
+IDX_NOTE = {"MET": "Вводится изменение выпуска металлургии к прошлому кварталу, %. 2026Q3: июль–август на уровне 2025, "
+                   "сентябрь около 5%, итого −31,7; 2026Q4: заводы стоят (−92,7). После остановки возврат даёт большие "
+                   "проценты: с 5% до 25% уровня 2025 — это +400. Строки ниже переводят индекс в уровень, его читает B8_CAPACITY"}
+ROW, _r = {}, FIRST + 3
+for _p in PARAMS:
+    _r += 3 if _p[0] in INDEX_IN else 0
+    ROW[_p[0]] = _r  # first (Base) row of each parameter; for INDEX_IN the level rows, inputs at ROW - 3
+    _r += 4
+LAST_ROW = _r - 1
 FACT_H1 = {"PORTS": 84.8, "DEF": 35.7, "MET": 100}  # first half 2026, fact
 STOP_MONTH = {"PORTS": 8, "MET": 9}  # 2026: ports stopped in August, metallurgy in September (Andrey, 28.10)
 # Quarter values set from facts, over the fill above (scenario index 0 Base, 1 Pess, 2 Opt -> {quarter: value}).
@@ -87,7 +101,8 @@ AGG_TEXT = {"avg": "среднее кварталов; 2026 = (2 × 1 пол. + 
             "q4": "2026 — 4 кв., дальше среднее кварталов", "year": "одно значение на год"}
 
 # quarterly rows that already exist (columns C:L = 2026Q3..2028Q4): annual row -> (first scenario row, aggregation)
-OLD_Q = {17: (43, "avg"), 20: (40, "fin"), 22: (94, "flow"), 23: (98, "flow"), 31: (102, "flow")}
+OLD_Q = {SL.Y["FIN"]: (SL.FIN_Q, "fin"), SL.Y["MIGR"]: (SL.LABOUR + 14, "flow"), SL.Y["MOB"]: (SL.LABOUR + 18, "flow"),
+         SL.Y["GUEST"]: (SL.LABOUR + 22, "flow")}
 OLD_YC = {2026: ("C", "D"), 2027: ("E", "H"), 2028: ("I", "L")}
 
 
@@ -116,13 +131,23 @@ def old_annual_formula(agg: str, r: int, y: int) -> str:
 def build() -> dict:
     out = {}
     rows = [["Сценарные допущения по кварталам — основной ввод (с 28.10.2026)"],
-            ["Вводите значения здесь, по кварталам. Годовая таблица вверху (строки 16–33) и годовые строки ниже теперь считаются "
-             "из этих кварталов и меняются сами. Где есть только годовые данные, ячейки года объединены: одно значение на год. "
-             "Столбец C — первое полугодие 2026 (факт, где он известен). Финансирование, удары и потоки людей вводятся в своих "
-             "квартальных строках (40–45, 94–105)."],
+            [f"Вводите значения здесь, по кварталам. Годовая таблица вверху (строки 16–32) и годовые блоки под ней "
+             f"(строки {SL.BRENT - 1}–{SL.DESTROYED + 5}) считаются из этих кварталов и меняются сами. Где есть только годовые данные, ячейки года объединены: одно значение на год. "
+             "Столбец C — первое полугодие 2026 (факт, где он известен). Финансирование и потоки людей вводятся в своих "
+             f"квартальных строках ({SL.FIN_Q}–{SL.FIN_Q + 2}, {SL.LABOUR + 14}–{SL.LABOUR + 25})."],
             ["Параметр", "Единицы", "1 пол. 2026"] + QLAB + ["Как считается год", "Комментарий"]]
     for code, _, name, unit, agg, rule, note in PARAMS:
         r = ROW[code]
+        if code in INDEX_IN:
+            for k, sc in enumerate(SC_NAMES):
+                rows.append([f"{IDX_NAME[code]} — {sc}", "% кв/кв (ввод)"] + [""] * 11
+                            + [f"ввод по кварталам; уровень в строках {r}–{r + 2}" if k == 0 else "", IDX_NOTE[code] if k == 0 else ""])
+            for k, sc in enumerate(SC_NAMES):
+                lvl = [FACT_H1[code]] + [f"={p}{r + k}*(1+{c}{r - 3 + k}/100)" for p, c in zip("C" + QCOLS, QCOLS)]
+                rows.append([f"{name} — {sc}", unit] + lvl + [AGG_TEXT[agg] if k == 0 else "", note if k == 0 else ""])
+            rows.append(["Металлургия: загрузка в модели (после ограничений B8_CAPACITY) — активный", "% от уровня 2025"]
+                        + [f"=B8_CAPACITY!{c}{RL.ACT[code]}" for c in "C" + QCOLS] + ["", ""])
+            continue
         for k, sc in enumerate(SC_NAMES):
             rows.append([f"{name} — {sc}", unit] + [""] * 11 + [AGG_TEXT[agg] if k == 0 else "", note if k == 0 else ""])
         cols = ["C", "F", "J"] if agg == "year" else ["C"] + list(QCOLS)
@@ -131,7 +156,7 @@ def build() -> dict:
     out[f"SCENARIOS!A{FIRST}:O{LAST_ROW}"] = rows
     # labels in the input rows are written above; values come only with --inputs, so blank them out of this range
     for code, *_ in PARAMS:
-        r = ROW[code]
+        r = ROW[code] - (3 if code in INDEX_IN else 0)  # index inputs: the input rows; the level rows keep their formulas
         for k in range(3):
             del rows[r - FIRST + k][2:13]
             rows[r - FIRST + k][2:2] = [None] * 11
@@ -144,7 +169,7 @@ def build() -> dict:
         out[f"SCENARIOS!C{ar}:K{ar}"] = [[annual_formula(agg, r + k, y) for k in range(3) for y in YEARS]]
     for ar, (r, agg) in OLD_Q.items():
         out[f"SCENARIOS!C{ar}:K{ar}"] = [[old_annual_formula(agg, r + k, y) for k in range(3) for y in YEARS]]
-    out["SCENARIOS!A13"] = [["Годовые значения считаются из квартальных строк (ввод — строки 202 и ниже, 40–45 и 94–105). "
+    out["SCENARIOS!A13"] = [[f"Годовые значения считаются из квартальных строк (ввод — строки {FIRST} и ниже). "
                              "Колонки «Активный» выбирают значения сценария из C3."]]
     return out
 
@@ -198,6 +223,9 @@ def inputs(snap: dict) -> dict:
                 for q, v in QOVR.get(code, {}).get(k, {}).items():
                     line[1 + QLAB.index(q)] = v
             vals.append(["" if v is None else v for v in line])
+        if code in INDEX_IN:  # levels -> index to the previous quarter, into the input rows
+            vals = [[""] + [round((x / p - 1) * 100, 2) for p, x in zip(v, v[1:])] for v in vals]
+            r -= 3
         out[f"SCENARIOS!C{r}:M{r + 2}"] = vals
     # existing quarterly rows: people flows by the annual values and the ceasefire quarter; financing scaled to the annual sum
     for ar, (r0, agg) in OLD_Q.items():
@@ -213,7 +241,7 @@ def inputs(snap: dict) -> dict:
                 line = [a[0] / 4] * 2
                 for y, ay in ((2027, a[1]), (2028, a[2])):
                     cy, cq = cfs[k]
-                    if ar == 23 and cy == y and cq > 1 and ay >= 0:  # mobilisation stops with the ceasefire
+                    if ar == SL.Y["MOB"] and cy == y and cq > 1 and ay >= 0:  # mobilisation stops with the ceasefire
                         line += [ay / (cq - 1)] * (cq - 1) + [0] * (5 - cq)
                     else:
                         line += [ay / 4] * 4

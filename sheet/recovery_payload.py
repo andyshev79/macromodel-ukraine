@@ -20,6 +20,7 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 import json
 import sys
 
+from macromodel import scenario_layout as SL
 from sheet.recovery_layout import ACT, ACT0, HDR, IND, LAST, QN, R0, chem_row, ind_row, sc_row
 from sheet.scenarios_quarterly_payload import QCOLS, QLAB, ROW as SQ_ROW
 
@@ -41,7 +42,7 @@ COEFS = [  # code, value, unit, note
 ]
 CR = {c[0]: COEF0 + i for i, c in enumerate(COEFS)}
 K = lambda code: f"COEFS!$E${CR[code]}"
-SC_ROW0 = 299  # SCENARIOS: destroyed capacity
+SC_ROW0 = SL.DESTROYED  # SCENARIOS: destroyed capacity
 SROW = {"MET": SC_ROW0 + 2, "PORTS": SC_ROW0 + 3, "CHEM": SC_ROW0 + 4, "CHEM_Q": SC_ROW0 + 5}
 SC_NAMES = ("База", "Пессимистичный", "Оптимистичный")
 CF_COLS = ("C$16:$E$16", "F$16:$H$16", "I$16:$K$16")
@@ -93,10 +94,10 @@ def scenario_block(s: int) -> dict:
 def build() -> dict:
     out = {}
     rows = {R0: ["3. Восстановление после простоя и разрушений, по кварталам"],
-            R0 + 1: ["Как читать: путь SCENARIOS (строки 209–212 порты, 249–252 металлургия) — верхняя граница. После прекращения "
+            R0 + 1: [f"Как читать: путь SCENARIOS (строки {SQ_ROW['PORTS']}–{SQ_ROW['PORTS'] + 3} порты, {SQ_ROW['MET']}–{SQ_ROW['MET'] + 3} металлургия, из индекса к прошлому кварталу) — верхняя граница. После прекращения "
                      "огня в модель идёт наименьшее из трёх: путь сценария; возврат рынков — от уровня войны к цели за T кварталов, "
                      "T растёт с длиной простоя (COEFS REC_); отстройка разрушенного — начинается через R0 кварталов и идёт R1 "
-                     "кварталов (SCENARIOS строки 301–304). Руда: после прекращения огня часть руды, которую не берут свои заводы, "
+                     f"кварталов (SCENARIOS строки {SROW['MET']}–{SROW['CHEM_Q']}). Руда: после прекращения огня часть руды, которую не берут свои заводы, "
                      "уходит на экспорт через порты."],
             HDR: ["Код", "Показатель", "1 пол. 2026"] + QLAB + [2025, 2026, 2027, 2028, "Комментарий"],
             QN: ["QN", "Номер квартала (год × 4 + квартал)", ""] + [f"=VALUE(LEFT({c}${HDR};4))*4+VALUE(RIGHT({c}${HDR};1))" for c in QC]}
@@ -107,8 +108,8 @@ def build() -> dict:
                             [choose(c, [ind_row(s, code, "EFF") for s in range(3)]) for c in QC]
     rows[ACT0] = ["Активный сценарий (SCENARIOS C3)"]
     rows[a["K"]] = ["K", "Кварталов после прекращения огня", ""] + [choose(c, [sc_row(s) for s in range(3)]) for c in QC]
-    rows[a["MET"]] = act("MET", "Металлургия: загрузка, % от 2025") + [100] + avg(a["MET"]) + ["идёт в SCENARIOS строки 63 и 252"]
-    rows[a["PORTS"]] = act("PORTS", "Порты: млн т в год") + ["=B1_REAL!$D$12"] + avg(a["PORTS"]) + ["идёт в SCENARIOS строки 19 и 212"]
+    rows[a["MET"]] = act("MET", "Металлургия: загрузка, % от 2025") + [100] + avg(a["MET"]) + [f"идёт в SCENARIOS строки {SL.MET_Y} и {SQ_ROW['MET'] + 3}"]
+    rows[a["PORTS"]] = act("PORTS", "Порты: млн т в год") + ["=B1_REAL!$D$12"] + avg(a["PORTS"]) + [f"идёт в SCENARIOS строки {SL.Y["PORTS"]} и {SQ_ROW['PORTS'] + 3}"]
     rows[a["CHEM"]] = ["CHEM", "Химия и НПЗ: доступная мощность, % от 2025", choose("C", [chem_row(s) for s in range(3)])] + \
                       [choose(c, [chem_row(s) for s in range(3)]) for c in QC] + [100] + avg(a["CHEM"]) + \
                       ["идёт в B1_REAL: «другое» в переработке"]

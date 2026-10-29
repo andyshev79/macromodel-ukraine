@@ -6,6 +6,7 @@ import sys
 import pandas as pd
 
 from macromodel import quarterly
+from macromodel import scenario_layout as SL
 
 
 def test_quarterly_sample_and_drivers():
@@ -150,7 +151,7 @@ def test_military_block():
     assert f"J{r['MIL_N']}/F{r['MIL_N']}" in b4[r["MIL_FUND"] - 1][9]  # fund follows headcount
     assert f"J{r['MIL_G']}" in b4[r["PUB_G"] - 1][9]  # wage equation sees pay rates; the fund goes to income
     assert "MIL_FUND" in str(b4[r["MIL_REAL"] - 1]) or f"{r['MIL_FUND']}" in b4[r["MIL_REAL"] - 1][4]
-    sc = next(v for k, v in p.items() if k.startswith("SCENARIOS!A80:"))
+    sc = next(v for k, v in p.items() if k.startswith(f"SCENARIOS!A{SL.LABOUR}:"))
     assert sc[-1][0].startswith("Как считается") and sc[-6][0] == "Численность военных — активный"
 
 
@@ -190,7 +191,7 @@ def test_construction_block():
     t = p["B9_CONSTRUCTION!A1:H55"]
     assert [r[0] for r in t[21:26]] == ["F_CIVIL", "F_INFRA", "F_FORT", "CONSTR", "GVA_F"]
     assert t[24][4].startswith(f"=({fact_ytd()['months']}*E19+")  # 2026 anchored to the monthly facts
-    assert "COEFS!$E$171*F13" in t[22][5] and "SCENARIOS!M131" in t[14][5]
+    assert "COEFS!$E$171*F13" in t[22][5] and f"SCENARIOS!M{SL.RECON}" in t[14][5]
     c = {r["code"]: r["coef"] for r in coef_rows()}
     assert abs(c["F_W_CIVIL"] + c["F_W_INFRA"] + c["F_W_FORT"] - 1) < 1e-9
     assert c["F_CIVIL_HH"] > 0 and 0.5 < c["F_LINK_CONSTR"] < 1.2
@@ -234,14 +235,15 @@ def test_agro_block():
 
 
 def test_scenario_logic():
-    t = payload("scenario_logic_payload")["SCENARIOS!A142:F189"]
+    t = payload("scenario_logic_payload")[f"SCENARIOS!A{SL.LIMITS}:F{SL.LIMITS + 45}"]
     lim = {r[0]: r[3] for r in t[3:13]}
     assert lim["LIM_PORTS"] == 160 and lim["LIM_CAP"] == 24 and lim["FACT_PORTS"] == 84.8
-    chk = [r for r in t[16:46]]
-    assert t[14][3] == '=COUNTIF(D158:F187;"ВНИМАНИЕ*")' and chk[0][0] == "L_PORTS" and chk[-1][0] == "O_139"
+    chk = [r for r in t[16:44]]
+    assert t[14][3] == f'=COUNTIF(D{SL.LIMITS + 16}:F{SL.LIMITS + 43};"ВНИМАНИЕ*")' and chk[0][0] == "L_PORTS" and chk[-1][0] == f"O_{SL.AREA}"
+    assert not any("STRIKES" in r[0] for r in chk)  # energy strikes removed 2026-10-29
     assert all(str(f).startswith("=") for r in chk for f in r[3:4])
-    assert "C110:L110" in next(r for r in chk if r[0] == "L_MIL")[3]  # military headcount rows
-    assert "C123:E123" in next(r for r in chk if r[0] == "C_PEACE")[3]  # peace effect rows
+    assert f"C{SL.LABOUR + 30}:L{SL.LABOUR + 30}" in next(r for r in chk if r[0] == "L_MIL")[3]  # military headcount rows
+    assert f"C{SL.PEACE_C}:E{SL.PEACE_C}" in next(r for r in chk if r[0] == "C_PEACE")[3]  # peace effect rows
 
 
 def test_other_split():
@@ -268,10 +270,10 @@ def test_pub_services():
     r = {row[0]: 100 + i for i, row in enumerate(t) if row and row[0]}
     assert p["B1_REAL!A91:H98"][4][5] == f"=F{r['PUB_REAL']}"  # row 95 takes real growth = fund over rates
     assert t[r["PUB_RATE"] - 100][4].startswith("=MAX(")  # rates never below the CPI floor
-    assert "SCENARIOS!M194" in t[r["PUB_FUND"] - 100][5]
+    assert f"SCENARIOS!M{SL.EDU}" in t[r["PUB_FUND"] - 100][5]
     pp = pub_prices()
     assert 0.5 < pp["coef"]["MINW"] < 1.2 and pp["r2"] > 0.5  # history: the deflator followed the minimum wage
-    assert "SCENARIOS!A191:O194" in p  # pay fund defaults, written only without --coefs
+    assert f"SCENARIOS!A{SL.EDU - 3}:O{SL.EDU}" in p  # pay fund defaults, written only without --coefs
 
 
 def test_b5_quarterly():
@@ -287,7 +289,8 @@ def test_b5_quarterly():
     assert "B5_EXTERNAL!H80:K80" in payload("b6_payload")["B6_FISCAL!A1:H47"][42][4]  # euro revaluation of FX debt
     fit = X.remit_fit()
     assert 0.8 < fit["coef"]["REM_L"] < 1 and fit["r2"] > 0.7
-    assert "SCENARIOS!A196:O199" in p and "SCENARIOS!A196:O199" not in payload("b5_payload", "--coefs")
+    eur = f"SCENARIOS!A{SL.EURUSD - 3}:O{SL.EURUSD}"
+    assert eur in p and eur not in payload("b5_payload", "--coefs")
     sq = payload("scenarios_q_payload")
     assert "B5_EXTERNAL!J69" in sq["ANCHORS!BB29:BC29"][0][0] and "B5_EXTERNAL!J45" in sq["ANCHORS!BB12:BK12"][0][0]
 
@@ -313,12 +316,12 @@ def test_peace_by_quarter():
     q = p["B2_DEMAND!H51:BK55"]
     assert len(q[0]) == 56 and q[0][0] == "=H$31" and q[0][-1] == "=BK$31"
     assert q[2][0] == '=IF($C$52="нет";0;IF(H$31>=$C$52;1;0))'
-    assert q[3][45] == "" and "SCENARIOS!$L$123:$N$123" in q[3][46] and "(BB53-AX53)" in q[3][46]
+    assert q[3][45] == "" and f"SCENARIOS!$L${SL.PEACE_C}:$N${SL.PEACE_C}" in q[3][46] and "(BB53-AX53)" in q[3][46]
     hh = p["B2_DEMAND!BB32:BK37"][0][0]
     assert "-SUMIF($H$30:$BK$30;BB$30;$H$54:$BK$54)/4+BB54" in hh
     b1 = payload("b1_payload")
     assert any("B2_DEMAND!$H$55:$BK$55" in str(v) for v in b1.values())
-    assert not any("SCENARIOS!L124" in str(v) or "SCENARIOS!M124" in str(v) for v in b1.values())
+    assert not any(f"SCENARIOS!L{SL.PEACE_I}" in str(v) or f"SCENARIOS!M{SL.PEACE_I}" in str(v) for v in b1.values())
 
 
 def test_bop_closure():
@@ -328,12 +331,13 @@ def test_bop_closure():
     row = {r[0]: r for r in sec if r and r[0]}
     assert row["RESQ"][10] == "=K87+K91+K92" and row["RESQ"][9] == "=ANCHORS!BB24"
     assert row["RES_FLOOR"][10] == "=COEFS!$E$233*SUM(H57:K57)/12"
-    assert row["EXTRA_FIN"][10] == "=MIN(K89;K90)" and row["EXTRA_AV"][10] == "=SCENARIOS!E297"
+    assert row["EXTRA_FIN"][10] == "=MIN(K89;K90)" and row["EXTRA_AV"][10] == f"=SCENARIOS!E{SL.EXTRA_FIN + 3}"
     assert row["IMP_CUT"][18] == "=S89-S91"
     assert "COEFS!$E$234*E$37" in row["FXQ_RULE"][11] and "COEFS!$E$234*F$37" in row["FXQ_RULE"][15]
     assert p["ANCHORS!BB22:BK22"][0][1] == "=B5_EXTERNAL!K57-B5_EXTERNAL!K92"
-    sc = p["SCENARIOS!A293:O297"]
-    assert sc[4][3] == "=CHOOSE(MATCH($C$3;$A$8:$A$10;0);D294;D295;D296)" and sc[2][3] == 0
+    x = SL.EXTRA_FIN
+    sc = p[f"SCENARIOS!A{x - 1}:O{x + 3}"]
+    assert sc[4][3] == f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);D{x};D{x + 1};D{x + 2})" and sc[2][3] == 0
     assert [r[4] for r in p["COEFS!A233:L234"]] == [3, 2]
     assert p["CHECKS!A40:Q41"][0][14] == "=B5_EXTERNAL!E37"
 
@@ -362,3 +366,13 @@ def test_deficit_2026_by_treasury_months():
     q3, q4 = p["ANCHORS!BB27:BC27"][0]
     assert "J$53:$L$53" in q3 and "SUM($AZ27:$BB27)" in q4  # Q4 closes the annual deficit
     assert p["CHECKS!A43:D44"][0][3] == "=B6_FISCAL!D55"
+
+
+def test_fuel_input_is_quarter_on_quarter():
+    """Andrey, 29.10: fuel is entered as q/q; the y/y that B3_PRICES row 45 reads chains it with the same quarter a year ago."""
+    f = payload("shocks_payload")[f"SCENARIOS!A{SL.FUEL_HEAD}:L{SL.FUEL_QQ_RES + 1}"]
+    q, lag = SL.FUEL_QQ, SL.FUEL_LAG
+    assert f[1][2] == 13.6 and f[2][2:6] == [3.7, 1.6, 18.6, 6.8] and f[2][6] == f"=C{SL.FUEL_QQ_RES}"
+    assert f[3][3] == f'=IF(D{q}="";"";(1+B3_PRICES!F45/100)*(1+D{q}/100)/(1+D{lag}/100)*100-100)'
+    b3 = payload("cpi_blocks_payload")["B3_PRICES!A37:P60"]
+    assert f"SCENARIOS!D{SL.FUEL}" in b3[8][6]  # 2026Q4 of the fuel block (column G)

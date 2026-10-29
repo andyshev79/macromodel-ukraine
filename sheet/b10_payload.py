@@ -5,6 +5,7 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 import json
 import sys
 
+from macromodel import scenario_layout as SL
 from macromodel.blocks.agro import (CALIBRATED, COEF_FIRST, CROPS, FACT, GRAINS, NOW, ROW, SPRING, coef_rows, crops,
                                     history, sources)
 
@@ -22,7 +23,7 @@ out[f"COEFS!A{COEF_FIRST}:L{COEF_FIRST + len(rows) - 1}"] = [
     [r["code"], "B10", r["eq"], r["var"], float(r["coef"]), "", "", "", r["method"], "", "2026-10-25", r["note"]] for r in rows]
 
 # SCENARIOS: sunflower oil price, weather and sown area (base / pessimistic / optimistic), active columns L:N
-SC_FIRST = 134
+SC_FIRST = SL.AGRO_FIRST
 SUN, WEA, AREA = SC_FIRST + 3, SC_FIRST + 4, SC_FIRST + 5
 act = lambda r: [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{a}{r};{b}{r};{c_}{r})" for a, b, c_ in ["CFI", "DGJ", "EHK"]]
 out[f"SCENARIOS!A{SC_FIRST}:O{SC_FIRST + 6}"] = [
@@ -58,11 +59,11 @@ text = [
     ["1. Драйверы"],
     ["Код", "Показатель", "Единицы", int(FACT), int(NOW), 2027, 2028, "Источник"],
     ["PX_WHEAT", "Цена пшеницы FOB Чёрное море", "USD/т", round(h["px"].loc[FACT, "WHEAT"]), round(h["px"].loc[NOW, "WHEAT"])] +
-    [f"={pc[cc]}11*SCENARIOS!{ACT[cc]}25/SCENARIOS!{ACT[pc[cc]]}25" for cc in "FG"] +
+    [f"={pc[cc]}11*SCENARIOS!{ACT[cc]}{SL.Y['WHEAT']}/SCENARIOS!{ACT[pc[cc]]}{SL.Y['WHEAT']}" for cc in "FG"] +
     [f"{FACT}–{NOW} — MacroStat AGROTrends (среднее месяцев с данными); дальше рост по SCENARIOS строка 25"],
     ["PX_SUNOIL", "Цена подсолнечного масла FOB", "USD/т", round(h["px"].loc[FACT, "SUNOIL"]), round(h["px"].loc[NOW, "SUNOIL"])] +
     [f"=SCENARIOS!{ACT[cc]}{SUN}" for cc in "FG"] + [f"SCENARIOS строка {SUN}"],
-    ["PORTS", "Пропускная способность морских портов", "млн т в год", 82.2] + [f"=SCENARIOS!{ACT[cc]}19" for cc in "EFG"] +
+    ["PORTS", "Пропускная способность морских портов", "млн т в год", 82.2] + [f"=SCENARIOS!{ACT[cc]}{SL.Y['PORTS']}" for cc in "EFG"] +
     ["SCENARIOS строка 19"],
     ["WEATHER", "Погода: отклонение урожайности", "%", "", ""] + [f"=SCENARIOS!{ACT[cc]}{WEA}" for cc in "FG"] +
     [f"SCENARIOS строка {WEA}"],

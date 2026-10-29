@@ -25,7 +25,7 @@ SECTORS = {
     "O": "Госуправление и оборона",
 }
 
-# Driver codes per sector; growth drivers enter as % change, STRIKES as change in index.
+# Driver codes per sector; growth drivers enter as % change.
 # WAR22 is a 2022 dummy that absorbs the invasion shock.
 EQUATIONS = {
     "A": ["HARVEST"],
@@ -87,7 +87,6 @@ def drivers() -> pd.DataFrame:
     for c in ["HARVEST", "PORTS", "STEEL"]:
         g[c] = x[c].astype(float).pct_change() * 100
     g["EA_GDP"] = x["EA_GDP"].astype(float)
-    g["STRIKES"] = x["STRIKES"].astype(float).diff()
     g["WAR22"] = (g.index == "2022").astype(float)
     d = quarterly()
     year = d.index.str[:4]

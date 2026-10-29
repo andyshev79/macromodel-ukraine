@@ -6,8 +6,14 @@ Output: JSON {range: 2D list}, formulas in ru_RU syntax.
 """
 import json
 
-RANGES = ["C17:N33", "C40:L53", "C82:L117", "C205:M297", "C301:E303"]  # numeric input rows: annual, quarterly near-term, labour, quarterly block, destroyed shares
-DATE_RANGES = [("C17:N33", "*(ROW(SCENARIOS!C17:N33)<>20)"), ("C43:L53", ""), ("C82:L117", ""), ("C205:M297", ""), ("C301:E303", "")]  # row 20: financing in USD mn
+from macromodel import scenario_layout as SL
+
+L = SL.LABOUR
+RANGES = [f"C{SL.ANNUAL_FIRST + 1}:N{SL.ANNUAL_LAST}", f"C{SL.FIN_Q}:L{SL.RATE_Q}", f"C{SL.TARIFF}:L{SL.TARIFF}", f"C{SL.FUEL_QQ}:L{SL.FUEL_QQ}", f"C{L + 2}:L{L + 37}",
+          f"C{SL.Q_MAIN + 3}:M{SL.EXTRA_FIN + 3}", f"C{SL.DESTROYED + 2}:E{SL.DESTROYED + 4}"]
+# numeric input rows: annual, quarterly financing to near-term, tariffs, fuel q/q, labour, main quarterly block, destroyed shares
+DATE_RANGES = [(RANGES[0], f"*(ROW(SCENARIOS!{RANGES[0]})<>{SL.Y['FIN']})")] + [(r, "") for r in RANGES[1:]]  # financing in USD mn
+DATE_RANGES[1] = (f"C{SL.GDP_Q}:L{SL.RATE_Q}", "")  # quarterly financing is in USD mn, above the date serials
 LO, HI = 45000, 47000  # date serials of 2023-2028
 
 text = "+".join(f"SUMPRODUCT(--ISTEXT(SCENARIOS!{r}))" for r in RANGES)

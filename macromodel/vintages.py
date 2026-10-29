@@ -21,8 +21,8 @@ STORE = ROOT / "data" / "vintages" / "vintages.csv"
 COLUMNS = ["vintage", "date", "scenario", "last_actual", "kind", "code", "name", "units", "agg",
            "year", "value", "status", "note"]
 
-# SCENARIOS rows 16-33, in sheet order
-INPUT_CODES = ["CEASEFIRE_Q", "ENERGY_STRIKES", "ENERGY_CAP", "PORTS_CAP", "FIN_PROMISED", "DEFENCE_GDP",
+# SCENARIOS rows 16-32, in sheet order (energy strikes removed 2026-10-29)
+INPUT_CODES = ["CEASEFIRE_Q", "ENERGY_CAP", "PORTS_CAP", "FIN_PROMISED", "DEFENCE_GDP",
                "MIGR_UA", "MOB", "HARVEST", "WHEAT", "STEEL", "TTF", "EA_GDP", "HICP", "FED_RATE",
                "GUEST", "MIGR_UA_SHARE", "GUEST_SHARE"]
 
@@ -50,7 +50,7 @@ def build(meta: dict, annual: list, scenarios: list, checks: list, conclusions: 
     """Rows of one vintage.
 
     annual: [code, name, units, agg, base_year_value, y1, y2, y3]
-    scenarios: [name, units, y1, y2, y3] for SCENARIOS rows 16-33 (active columns)
+    scenarios: [name, units, y1, y2, y3] for SCENARIOS rows 16-32 (active columns)
     checks: [code, name, units, y1, y2, y3, status1, status2, status3]
     conclusions: [section, text] with section from SECTIONS (kept in the name column)
     """

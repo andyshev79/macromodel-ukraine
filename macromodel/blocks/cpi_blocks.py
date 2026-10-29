@@ -5,7 +5,7 @@ effective basket weights). Block equations, OLS with Newey–West errors:
 - core: FX, wages and last quarter's core (2011–2025 without 2022Q1–2023Q1);
 - raw food: last quarter's raw food, fuel prices of the previous quarter, harvest growth (2017–2025);
 - fuel: Brent in USD and FX, y/y (2019–2026, war quarters kept: they hold the FX variation);
-- administered: inertia (2017–2025), plus utility tariff hikes from SCENARIOS row 57 over four quarters.
+- administered: inertia (2017–2025), plus utility tariff hikes from SCENARIOS (scenario_layout.TARIFF) over four quarters.
 The NBU split starts in 2017 (raw food, administered) and 2019 (fuel), so these samples are short.
 """
 from pathlib import Path
@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from macromodel import quarterly as Q
+from macromodel import scenario_layout as SL
 
 EXT = Path(__file__).resolve().parents[2] / "data" / "external"
 COEF_FIRST = 108  # COEFS rows after fuel (105-106)
@@ -67,7 +68,7 @@ def coef_rows() -> list[dict]:
         ("RAW", "FUEL_L1"): "Топливо прошлого квартала: затраты аграриев и перевозки",
         ("RAW", "HARV"): "Рост урожая зерновых и масличных (с 3 кв. года урожая по 2 кв. следующего); слабая связь",
         ("FUEL", "BRENT"): "Нефть Brent в USD, % г/г", ("FUEL", "FX"): "Девальвация: топливо импортное, перенос ≈ 1",
-        ("ADM", "ADM_L1"): "Инерция админцен (акцизы, проезд, связь); тарифы ЖКУ добавляются из SCENARIOS строка 57",
+        ("ADM", "ADM_L1"): f"Инерция админцен (акцизы, проезд, связь); тарифы ЖКУ добавляются из SCENARIOS строка {SL.TARIFF}",
     }
     method = lambda k: f"оценка МНК {est[k]['period']}, квартальные г/г, ошибки Ньюи–Уэста" + (
         " без 2022Q1–2023Q1" if EQ[k][4] else "")

@@ -1,7 +1,7 @@
 """Block B9: construction by kind of work, with financing and capacity checks (2026-10-25).
 
 Construction grows from three blocks: civil (housing and commercial, from household consumption),
-infrastructure and reconstruction (scenario points of reconstruction, SCENARIOS row 124) and
+infrastructure and reconstruction (scenario points of reconstruction, SCENARIOS row scenario_layout.PEACE_I) and
 fortifications (real defence spending). The construction output index (Ukrstat, quarterly from 2011)
 gives the link to GVA_F. Since 2026-10-26 the Ukrstat index by kind of construction (buildings: residential
 and non-residential; civil engineering works), monthly from 2015, gives the civil equation (buildings index)

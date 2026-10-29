@@ -68,7 +68,9 @@ top.append(["DOM_DEMAND", "Рост внутреннего спроса (C + G +
 out["B2_DEMAND!A1:H16"] = top
 
 # Peace effect after a ceasefire, annual, per scenario (SCENARIOS rows PEACE_ROW..; active columns L:N)
-PEACE_FIRST = 120
+from macromodel import scenario_layout as SL
+
+PEACE_FIRST = SL.PEACE
 PEACE_ROW = PEACE_FIRST + 3
 ACT_C = dict(zip("EFG", "LMN"))
 PEACE = [
@@ -105,7 +107,7 @@ from macromodel.blocks.agro import ROW as AGRO_ROW, coef_rows as agro_coefs
 AGRO_SH = f"COEFS!$E${AGRO_ROW['A_AGRO_SH']}"
 AGRO_SH_TXT = f"{next(r['coef'] for r in agro_coefs() if r['code'] == 'A_AGRO_SH'):.2f}".replace(".", ",")
 kv = lambda c, v: f"{next(r['coef'] for r in coefs if (r['eq'], r['var']) == (f'GDPE_{c}', v)):.2f}".replace(".", ",").replace("-", "−")
-# Section 5: the peace effect by quarter. SCENARIOS rows 123-124 are the effect in quarters after the ceasefire
+# Section 5: the peace effect by quarter. SCENARIOS rows PEACE_ROW, PEACE_ROW + 1 are the effect in quarters after the ceasefire
 # (row 16), not in the whole year: reconstruction and spending cannot start before it. A quarter that is the first
 # peaceful one against the same quarter a year ago also gets last year's effect (the level jump reaches it only now).
 SEC5 = 50
@@ -206,9 +208,9 @@ out[f"B2_DEMAND!A{SEC5}:H{PI}"] = [
     ["Код", "Показатель", "", "", "", "", "", "=H31"],
     ["CEASEFIRE", "Квартал прекращения огня (SCENARIOS строка 16, активный сценарий)", "=" + cf],
     ["PEACE_Q", "Квартал после прекращения огня", "1 — мир, 0 — война"],
-    ["PEACE_HH", "Эффект мира в потреблении", "п.п. к росту г/г: значение года (SCENARIOS строка 123) после прекращения огня; "
+    ["PEACE_HH", "Эффект мира в потреблении", f"п.п. к росту г/г: значение года (SCENARIOS строка {PEACE_ROW}) после прекращения огня; "
      "первый мирный квартал к военному год назад получает и прошлогодний"],
-    ["PEACE_I", "Эффект восстановления в ВНОК", "п.п. к росту г/г: то же по SCENARIOS строка 124"],
+    ["PEACE_I", "Эффект восстановления в ВНОК", f"п.п. к росту г/г: то же по SCENARIOS строка {PEACE_ROW + 1}"],
 ]
 allq = [col(i) for i in range(7, LAST_COL + 10)]  # H..BK
 out[f"B2_DEMAND!H{SEC5 + 1}:BK{PI}"] = [
