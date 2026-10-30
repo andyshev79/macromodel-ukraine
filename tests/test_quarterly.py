@@ -372,7 +372,7 @@ def test_fuel_input_is_quarter_on_quarter():
     f = payload("shocks_payload")[f"SCENARIOS!A{SL.FUEL_HEAD}:L{SL.FUEL_QQ + 1}"]
     q = SL.FUEL_QQ
     assert f[1][2] == 13.6 and len(f) == 3 and SL.LABOUR == SL.FUEL_QQ + 3  # head, input, note; no helper rows
-    b3 = payload("cpi_blocks_payload")["B3_PRICES!A37:P73"]
+    b3 = payload("cpi_blocks_payload")["B3_PRICES!A37:P75"]
     sec = {r[0]: r for r in b3[27:31]}  # section 6 = rows 64-67
     assert sec["FUEL_IN"][6] == f'=IF(SCENARIOS!D{q}="";"";SCENARIOS!D{q})'
     assert sec["FUEL_LAG"][5:8] == [3.7, 1.6, "=D67"] and sec["FUEL_QQ"][3:5] == [18.6, 6.8]
@@ -383,9 +383,12 @@ def test_fuel_input_is_quarter_on_quarter():
 
 def test_tariffs_only_after_martial_law():
     """Andrey, 30.10: utility tariffs rise only after martial law is lifted (the quarter after the ceasefire)."""
-    b3 = payload("cpi_blocks_payload")["B3_PRICES!A37:P73"]
-    end, tin, eff = b3[-3], b3[-2], b3[-1]
+    b3 = payload("cpi_blocks_payload")["B3_PRICES!A37:P75"]
+    end, tin, cap, back, eff = b3[-5:]
     assert end[0] == "ML_END" and "SCENARIOS!$L$16:$N$16" in end[3]
     assert tin[5] == f"=N(SCENARIOS!C{SL.TARIFF})"
-    assert eff[0] == "TARIFF_EFF" and "SUM($D72:F72)" in eff[5]  # deferred hikes land in the first quarter without martial law
-    assert b3[11][0] == "ADM_T" and b3[11][5].endswith("SUM(D73:F73)")
+    # Andrey, 30.10: after martial law the backlog rises gradually, at most 25% a year in quarterly steps
+    assert cap[0] == "TARIFF_MAX" and cap[3] == 25
+    assert back[0] == "TARIFF_BACK" and back[5] == "=E74-E75+F72"
+    assert eff[0] == "TARIFF_EFF" and eff[5].endswith("MIN(F74;$D$73/4))")
+    assert b3[11][0] == "ADM_T" and b3[11][5].endswith("SUM(D75:F75)")
