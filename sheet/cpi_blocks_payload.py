@@ -29,8 +29,10 @@ MAIN_Q = {c: s for c, s in zip(COLS[2:], "DEFGHIJKLM")}
 # section 6: fuel input q/q (SCENARIOS, one row) -> y/y of the fuel block (row 45); moved here from SCENARIOS 2026-10-29
 FU = {"HEAD": 62, "IN": 64, "LAG": 65, "YY": 66, "QQ": 67}
 # section 7: tariffs rise only after martial law is lifted (rule of 2026-10-30): hikes entered for earlier quarters
-# are deferred to the first quarter without martial law; martial law is assumed lifted the quarter after the ceasefire
-TA = {"HEAD": 69, "END": 71, "IN": 72, "EFF": 73}
+# are deferred to the first quarter without martial law; martial law is assumed lifted the quarter after the ceasefire.
+# From then on the backlog rises gradually, at most TARIFF_MAX % a year in equal quarterly steps (Andrey, 30.10)
+TA = {"HEAD": 69, "END": 71, "IN": 72, "MAX": 73, "BACK": 74, "EFF": 75}
+TARIFF_MAX = 25  # % a year: middle of the 20-30% a year NBU-style path; NBU admin prices 11-14% y/y in 2026-2028
 CEASE = "IFERROR(INDEX(SCENARIOS!$L$16:$N$16;MATCH(\"2*\";SCENARIOS!$L$16:$N$16;0));\"нет\")"
 
 rows_c = B.coef_rows()
@@ -156,9 +158,14 @@ tariff_rows = [
     + [""] * 11 + ["«нет» — военное положение до конца горизонта, тарифы не повышаются"],
     ["TARIFF_IN", "Ввод: повышение тарифов", f"SCENARIOS строка {TARIFF_ROW}, % в квартал повышения", 0, 0]
     + [f"=N(SCENARIOS!{SCQ[c]}{TARIFF_ROW})" for c in COLS[2:]] + [""],
-    ["TARIFF_EFF", "Повышение тарифов с учётом военного положения", "0 до отмены; в первый квартал без него — все отложенные повышения"]
-    + [f"=IF(OR($D${TA['END']}=\"нет\";{c}$39<$D${TA['END']});0;IF({c}$39=$D${TA['END']};SUM($D{TA['IN']}:{c}{TA['IN']});{c}{TA['IN']}))"
-       for c in COLS] + ["идёт в строку 48 (ADM_T)"],
+    ["TARIFF_MAX", "Предел повышения тарифов", "% в год, равными шагами по кварталам", TARIFF_MAX]
+    + [""] * 11 + ["ориентир НБУ: тарифы 20–30% в год, админцены 11–14% г/г в 2026–2028"],
+    ["TARIFF_BACK", "Накоплено к повышению", "остаток прошлого квартала + ввод квартала", f"=D{TA['IN']}"]
+    + [f"={COLS[i - 1]}{TA['BACK']}-{COLS[i - 1]}{TA['EFF']}+{c}{TA['IN']}" for i, c in enumerate(COLS) if i]
+    + ["повышения, введённые на время военного положения, ждут здесь"],
+    ["TARIFF_EFF", "Повышение тарифов с учётом военного положения", "0 до отмены; потом накопленное, но не больше предела / 4 за квартал"]
+    + [f"=IF(OR($D${TA['END']}=\"нет\";{c}$39<$D${TA['END']});0;MIN({c}{TA['BACK']};$D${TA['MAX']}/4))" for c in COLS]
+    + ["идёт в строку 48 (ADM_T)"],
 ]
 rows += [[""]] + tariff_rows
 assert 37 + len(rows) - 1 == TA["EFF"]
