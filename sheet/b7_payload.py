@@ -1,8 +1,8 @@
 """Build the cell contents of B7_MONETARY, its COEFS rows and ANCHORS forecast links (block B7).
 
 Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators). Stocks in bn UAH.
-The rate rule reads this year's CPI (B3) and reserves (B5); neither depends on the rate,
-so there is no circular reference.
+The rate rule reads this year's end-of-year CPI (B3, row 52 via ANCHORS row 10) and reserves (B5);
+the rate reaches CPI and demand only with a one-year lag, so there is no circular reference.
 """
 import json
 import sys
@@ -50,14 +50,17 @@ rows = [
     ["GDP_NOM_G", "Рост номинального ВВП", "%"] + [f"=B3_PRICES!{c}25" for c in "DEFG"] + ["B3_PRICES"],
     ["GDP_NOM", "Номинальный ВВП", "млрд грн"] + [f"=B3_PRICES!{c}26" for c in "DEFG"] + ["B3_PRICES"],
     ["RES_M", "Резервы, месяцев импорта", "месяцев"] + [f"=B5_EXTERNAL!{c}35" for c in "DEFG"] + ["B5_EXTERNAL"],
-    [""],
+    ["CPI_DEC", "ИПЦ на конец года (декабрь к декабрю)", "%"] + [f"=ANCHORS!{c}10" for c in ("AY", "BC", "BG", "BK")]
+    + ["ANCHORS строка 10 (B3_PRICES, строка 52); на него смотрит правило ставки"],
     ["2. Ставки, %"],
     ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
     ["RES_PREM", "Надбавка за нехватку резервов", f"{k('RATE','RES')} п.п. × месяцев ниже {k('RATE','MONTHS')}, не больше {k('RATE','RES_MAX')}", ""]
     + EFG(lambda c, p: f"=MIN({C('RATE','RES_MAX')};{C('RATE','RES')}*MAX(0;{C('RATE','MONTHS')}-{c}14))"),
     ["RATE_M", "Учётная ставка по правилу, конец года",
-     f"{k('RATE','const')} + {k('RATE','CPI')} × ИПЦ + {k('RATE','RATE_L')} × ставка прошлого года + надбавка", ""]
-    + EFG(lambda c, p: f"={C('RATE','const')}+{C('RATE','CPI')}*{c}11+{C('RATE','RATE_L')}*{p}20+{c}18") + ["R² 0,73; 2026 — для сравнения с фактом"],
+     f"{k('RATE','RHO')} × ставка прошлого года + {k('RATE','RHO')} × (нейтральная {tk('NEUTRAL')} + ИПЦ на конец года "
+     f"+ {k('RATE','PHI')} × (ИПЦ на конец года − цель {k('RATE','TARGET')})) + надбавка", ""]
+    + EFG(lambda c, p: f"={C('RATE','RHO')}*{p}20+(1-{C('RATE','RHO')})*({T('NEUTRAL')}+{c}15+{C('RATE','PHI')}*({c}15-{C('RATE','TARGET')}))+{c}18")
+    + ["правило Тейлора: реакция на инфляцию 1,5 > 1; 2026 — для сравнения с фактом"],
     ["RATE", "Учётная ставка, конец года", "2025–2026 из ANCHORS, дальше правило", "=ANCHORS!AY14", "=ANCHORS!BC14", "=F19", "=G19"],
     ["RATE_AVG", "Учётная ставка, средняя за год", "среднее кварталов ANCHORS"] + avg(14),
     ["REAL_RATE", "Реальная учётная ставка", "средняя ставка − средний ИПЦ"] + [f"={c}21-{c}11" for c in "DEFG"] + ["проверка на листе CHECKS"],

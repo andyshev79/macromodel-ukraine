@@ -28,6 +28,10 @@ MAIN_Q = {c: s for c, s in zip(COLS[2:], "DEFGHIJKLM")}
 
 # section 6: fuel input q/q (SCENARIOS, one row) -> y/y of the fuel block (row 45); moved here from SCENARIOS 2026-10-29
 FU = {"HEAD": 62, "IN": 64, "LAG": 65, "YY": 66, "QQ": 67}
+# section 7: tariffs rise only after martial law is lifted (rule of 2026-10-30): hikes entered for earlier quarters
+# are deferred to the first quarter without martial law; martial law is assumed lifted the quarter after the ceasefire
+TA = {"HEAD": 69, "END": 71, "IN": 72, "EFF": 73}
+CEASE = "IFERROR(INDEX(SCENARIOS!$L$16:$N$16;MATCH(\"2*\";SCENARIOS!$L$16:$N$16;0));\"нет\")"
 
 rows_c = B.coef_rows()
 CROW = {(r["eq"], r["var"]): B.COEF_FIRST + i for i, r in enumerate(rows_c)}
@@ -66,10 +70,9 @@ def harv(c):
 
 
 def tariffs(c):
-    """Tariff hikes of this quarter and the three before it (SCENARIOS row TARIFF_ROW: C = 2026Q3 = B3 column F)."""
+    """Tariff hikes in effect (section 7, row TA['EFF']) in this quarter and the three before it."""
     i = COLS.index(c)
-    cols = [SCQ[COLS[j]] for j in range(max(2, i - 3), i + 1)]
-    return f"SUM(SCENARIOS!{cols[0]}{TARIFF_ROW}:{cols[-1]}{TARIFF_ROW})"
+    return f"SUM({COLS[max(0, i - 3)]}{TA['EFF']}:{c}{TA['EFF']})"
 
 
 rows = [
@@ -103,7 +106,8 @@ rows = [
     + [fact("ADM", i) for i in range(FACT)]
     + [f"={C('ADM', 'const')}+{C('ADM', 'ADM_L1')}*{prev(c)}47" for c in fc] + ["акцизы на табак и алкоголь, проезд, связь"],
     ["ADM_T", "Вклад повышения тарифов ЖКУ", "доля ЖКУ в админценах × повышения за 4 квартала", 0, 0]
-    + [f"={C('ADM', 'TARIFF')}*{tariffs(c)}" for c in COLS[2:]] + [f"SCENARIOS, строка {TARIFF_ROW}"],
+    + [f"={C('ADM', 'TARIFF')}*{tariffs(c)}" for c in COLS[2:]]
+    + [f"SCENARIOS строка {TARIFF_ROW}, только после отмены военного положения (строка {TA['EFF']})"],
     ["ADM", B.NAMES["ADM"], "строка 47 + строка 48"] + [fact("ADM", i) for i in range(FACT)]
     + [f"={c}47+{c}48" for c in fc],
     ["CORE", B.NAMES["CORE"], f"{kv('CORE', 'const')} + {kv('CORE', 'FX')} × девальвация + {kv('CORE', 'WAGE')} × зарплата "
@@ -144,7 +148,21 @@ fuel_rows = [
 ]
 rows += [[""]] + fuel_rows
 assert 37 + len(rows) - 1 == FU["QQ"]
-out[f"B3_PRICES!A37:P{37 + len(rows) - 1}"] = rows
+tariff_rows = [
+    ["7. Тарифы ЖКУ: повышение только после отмены военного положения"],
+    ["Код", "Показатель", "Как считается"] + QUARTERS + ["Комментарий"],
+    ["ML_END", "Первый квартал без военного положения", "квартал после прекращения огня (SCENARIOS строка 16, активный сценарий)",
+     f"=LET(q;{CEASE};IF(q=\"нет\";\"нет\";IF(RIGHT(q;1)=\"4\";(LEFT(q;4)+1)&\"Q1\";LEFT(q;5)&(RIGHT(q;1)+1))))"]
+    + [""] * 11 + ["«нет» — военное положение до конца горизонта, тарифы не повышаются"],
+    ["TARIFF_IN", "Ввод: повышение тарифов", f"SCENARIOS строка {TARIFF_ROW}, % в квартал повышения", 0, 0]
+    + [f"=N(SCENARIOS!{SCQ[c]}{TARIFF_ROW})" for c in COLS[2:]] + [""],
+    ["TARIFF_EFF", "Повышение тарифов с учётом военного положения", "0 до отмены; в первый квартал без него — все отложенные повышения"]
+    + [f"=IF(OR($D${TA['END']}=\"нет\";{c}$39<$D${TA['END']});0;IF({c}$39=$D${TA['END']};SUM($D{TA['IN']}:{c}{TA['IN']});{c}{TA['IN']}))"
+       for c in COLS] + ["идёт в строку 48 (ADM_T)"],
+]
+rows += [[""]] + tariff_rows
+assert 37 + len(rows) - 1 == TA["EFF"]
+out[f"B3_PRICES!A37:P{37 + len(rows) - 1}"] = rows  # through section 7
 out["ANCHORS!BB10"] = [["=INDEX(B3_PRICES!$D$52:$O$52;MATCH(BB$4;B3_PRICES!$D$39:$O$39;0))"]]
 if "--coefs" in sys.argv:
     out = {k: v for k, v in out.items() if k.startswith("COEFS")}

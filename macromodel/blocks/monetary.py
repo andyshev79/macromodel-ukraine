@@ -1,8 +1,10 @@
 """Block B7: NBU rate, bank rates, loans, deposits and liquidity (annual, UAH).
 
-The NBU rate follows a simple rule on the year's average CPI and last year's rate
-(OLS 2016-2025), plus a calibrated premium when reserves fall below three months of
-imports. Loan and deposit rates follow the NBU rate. Hryvnia loans grow with nominal
+The NBU rate follows a Taylor-type rule (since 2026-10-30): half of last year's rate plus
+half of (neutral real rate + end-of-year CPI + 0.5 x (end-of-year CPI - 5% target)), so the
+long-run response to inflation is 1.5 > 1, plus a calibrated premium when reserves fall below
+three months of imports. The OLS rule on average CPI (2016-2025) reacted 0.87 < 1 and gave a
+rate below inflation in high-inflation years; it stays in estimate() for MODEL_QUALITY. Loan and deposit rates follow the NBU rate. Hryvnia loans grow with nominal
 GDP and fall with the real loan rate. Hryvnia deposits keep their 2025 ratio to
 nominal GDP. Liquidity (NBU certificates of deposit) absorbs about half of the
 deposit growth that banks do not lend out.
@@ -19,6 +21,11 @@ from macromodel.blocks.real_sector import HIST, ols, quarterly
 EQUATIONS = {"RATE": ["CPI", "RATE_L"], "LOAN": ["RATE_AVG"], "DEP": ["RATE_AVG"], "LOANS_G": ["GDPN_G", "REAL"]}
 
 CALIBRATED = {
+    ("RATE", "RHO"): (0.5, "Сглаживание: вес ставки прошлого года. Проверка 2016–2025: ошибка 3,3 п.п. (0,3 — 4,1 п.п.); "
+                           "прогноз НБУ 29.10.2026 (IV.27 14,6, IV.28 11,7 при ИПЦ 7,3 и 5) правило даёт на 0,6–0,7 п.п. ниже"),
+    ("RATE", "PHI"): (0.5, "Реакция на отклонение ИПЦ на конец года от цели, сверх 1:1 (правило Тейлора). Итоговая реакция 1,5 > 1: "
+                           "реальная ставка растёт с инфляцией"),
+    ("RATE", "TARGET"): (5.0, "Цель НБУ по инфляции, % (5% ± 1 п.п.)"),
     ("RATE", "RES"): (2.0, "Надбавка к ставке, п.п. на каждый месяц импорта ниже порога резервов (2014–2015, 2022: НБУ поднимал ставку при угрозе резервам)"),
     ("RATE", "RES_MAX"): (10.0, "Предел надбавки за резервы, п.п."),
     ("RATE", "MONTHS"): (3.0, "Порог резервов для ставки, месяцев импорта"),
@@ -26,13 +33,14 @@ CALIBRATED = {
     ("LIQ", "SHARE"): (0.48, "Доля прироста (депозиты − кредиты), уходящая в депозитные сертификаты НБУ: сумма 2016–2025"),
 }
 
-COEF_ROWS = [("RATE", "const"), ("RATE", "CPI"), ("RATE", "RATE_L"), ("RATE", "RES"), ("RATE", "RES_MAX"),
+COEF_ROWS = [("RATE", "RHO"), ("RATE", "PHI"), ("RATE", "TARGET"), ("RATE", "RES"), ("RATE", "RES_MAX"),
              ("RATE", "MONTHS"), ("LOAN", "const"), ("LOAN", "RATE_AVG"), ("DEP", "const"), ("DEP", "RATE_AVG"),
              ("LOANS_G", "const"), ("LOANS_G", "GDPN_G"), ("LOANS_G", "REAL"), ("DEPS", "GDP"), ("LIQ", "SHARE")]
 
 
 TRANSMISSION = {
-    "NEUTRAL": (3.0, "Нейтральная реальная учётная ставка, %: допущение (для развивающихся экономик обычно 2–4%)"),
+    "NEUTRAL": (3.0, "Нейтральная реальная учётная ставка, %: допущение (для развивающихся экономик обычно 2–4%); "
+                     "её же берёт правило ставки B7 (RATE_M)"),
     "HH": (-0.2, "Потребление домохозяйств, п.п. роста на 1 п.п. жёсткости прошлого года. Оценка 2016–2025 дала +0,17 (неверный знак, война); "
                  "взято по мировому опыту 0,1–0,5"),
     "GFCF": (-0.7, "Инвестиции (ВНОК), п.п. на 1 п.п. жёсткости. Оценка МНК 2016–2025: −0,71 (ст. ошибка 0,66); мировой опыт 0,5–1,5"),
