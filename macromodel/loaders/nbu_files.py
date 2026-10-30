@@ -2,6 +2,8 @@
 
 - ES/Trade_m.xlsx: monthly goods exports and imports by commodity group, USD million,
   from 2010 (BPM6). The API has only goods and services totals.
+- ES/BOP_m.xlsx: monthly balance of payments (sheet 1.1, analytical form). The file is
+  updated before the API, so it fills the latest months of goods and services trade.
 - macro/GDP_y.xlsx: annual GDP (Gosstat) back to 2001: nominal, real index, deflator.
   The API's quarterly GDP starts in 2010.
 - macro/PPI_q.xlsx: quarterly producer prices 2007-2012; the API starts in 2013.
@@ -24,7 +26,7 @@ import pandas as pd
 import requests
 
 BASE = "https://bank.gov.ua/files"
-FILES = {"trade_m": "ES/Trade_m.xlsx", "gdp_y": "macro/GDP_y.xlsx", "ppi_q": "macro/PPI_q.xlsx",
+FILES = {"trade_m": "ES/Trade_m.xlsx", "bop_m": "ES/BOP_m.xlsx", "gdp_y": "macro/GDP_y.xlsx", "ppi_q": "macro/PPI_q.xlsx",
          "wages_m": "macro/Wages_m.xlsx", "wages_y": "macro/Wages_y.xlsx", "staff_m": "macro/Number_m.xlsx",
          "ccpi_m": "macro/CCPI_m.xlsx", "surveys_price": "macro/Surveys_price.xlsx", "surveys_rate": "macro/Surveys_rate.xlsx"}
 
@@ -70,14 +72,10 @@ def _month(v) -> int | None:
     return MONTHS_UA.index(v[:3]) + 1 if v[:3] in MONTHS_UA else None
 
 
-def trade_groups_m(p: Path, sheet: str) -> pd.DataFrame:
-    """Monthly goods trade by commodity group, USD million. sheet '1.1' exports, '1.2' imports.
-
-    Years label the first month column of their block (row 5, a number or a text), months
-    the row below (spelled in full or abbreviated); the running year carries over until the
-    next label. Summary columns on the right have no
-    month name and are skipped."""
-    rows = _rows(p, sheet)
+def _month_cols(rows: list[tuple]) -> tuple[int, dict[int, pd.Period]]:
+    """Header row index and {column: month}. Years label the first month column of their block
+    (a number or a text), months the row below (spelled in full or abbreviated); the running
+    year carries over until the next label. Summary columns have no month name and are skipped."""
     hi = next(i for i, r in enumerate(rows) if any(_month(v) for v in r))
     years, months = rows[hi - 1], rows[hi]
     cols, year = {}, None
@@ -90,9 +88,32 @@ def trade_groups_m(p: Path, sheet: str) -> pd.DataFrame:
             year = int(y)
         if m and year:
             cols[j] = pd.Period(f"{year}-{m:02d}", "M")
+    return hi, cols
+
+
+def trade_groups_m(p: Path, sheet: str) -> pd.DataFrame:
+    """Monthly goods trade by commodity group, USD million. sheet '1.1' exports, '1.2' imports."""
+    rows = _rows(p, sheet)
+    hi, cols = _month_cols(rows)
     out = {}
     for key, label in TRADE_GROUPS.items():
         r = next(r for r in rows[hi + 1:] if isinstance(r[2], str) and r[2].strip().startswith(label))
+        out[key] = {per: float(r[j]) for j, per in cols.items() if isinstance(r[j], (int, float))}
+    return pd.DataFrame(out).sort_index()
+
+
+# English row labels in BOP_m sheet 1.1
+BOP_ROWS = {"EXP_G": "Exports of goods", "IMP_G": "Imports of goods",
+            "EXP_S": "Exports of services", "IMP_S": "Imports of services"}
+
+
+def bop_trade_m(p: Path) -> pd.DataFrame:
+    """Monthly exports and imports of goods and services, USD million (BOP_m sheet 1.1)."""
+    rows = _rows(p, "1.1")
+    hi, cols = _month_cols(rows)
+    out = {}
+    for key, label in BOP_ROWS.items():
+        r = next(r for r in rows[hi + 1:] if isinstance(r[2], str) and r[2].strip() == label)
         out[key] = {per: float(r[j]) for j, per in cols.items() if isinstance(r[j], (int, float))}
     return pd.DataFrame(out).sort_index()
 

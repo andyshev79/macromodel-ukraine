@@ -359,7 +359,7 @@ def test_deficit_2026_by_treasury_months():
     p = payload("b6_payload")
     sec = p["B6_FISCAL!A49:P56"]
     fact = sec[2][3:15]
-    assert len([v for v in fact if v != ""]) == 8  # January-August 2026
+    assert len([v for v in fact if v != ""]) == 9  # January-September 2026
     assert abs(sum(fact[:6]) - 303.15) < 0.1  # H1 matches the actual quarters in ANCHORS
     assert sec[4][3:15][8] == "=IF(L51<>\"\";L51;$D$52)"  # September: fact or the rest of the year
     q3, q4 = p["ANCHORS!BB27:BC27"][0]
@@ -392,3 +392,11 @@ def test_tariffs_only_after_martial_law():
     assert back[0] == "TARIFF_BACK" and back[5] == "=E74-E75+F72"
     assert eff[0] == "TARIFF_EFF" and eff[5].endswith("MIN(F74;$D$73/4))")
     assert b3[11][0] == "ADM_T" and b3[11][5].endswith("SUM(D75:F75)")
+
+
+def test_q3_trade_fact_from_bop_file():
+    """30.10: the API stops at August, NBU's BOP_m file has September, so 2026Q3 exports and imports are facts."""
+    sec = payload("b5_payload")["B5_EXTERNAL!A43:T95"]
+    exp, imp = sec[13], sec[14]
+    assert exp[0] == "EXPQ" and isinstance(exp[9], (int, float)) and isinstance(imp[9], (int, float))  # J = 2026Q3
+    assert exp[10].startswith("=($E$24-SUM($H$56:$I$56))")  # 2026Q4 keeps the model split
