@@ -97,8 +97,8 @@ rows = [
 out[f"B6_FISCAL!A1:H{len(rows)}"] = rows
 
 # 2026 by Treasury months: state budget balance, bn UAH (+ = deficit), from the cumulative
-# figures on index.minfin.com.ua (Treasury), 28.10.2026. Months without data stay blank.
-DEF_2026_M = [-17.927, 50.233, 98.034, 143.964, 133.710, -104.859, -115.890, 382.803]
+# figures on index.minfin.com.ua (Treasury), 30.10.2026. Months without data stay blank.
+DEF_2026_M = [-17.927, 50.233, 98.034, 143.964, 133.710, -104.859, -115.890, 382.803, 99.289]
 MONTHS = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
 MC = [chr(68 + i) for i in range(12)]  # D..O
 M0 = len(rows) + 2  # section title row

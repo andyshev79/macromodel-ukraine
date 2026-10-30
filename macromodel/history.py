@@ -226,6 +226,13 @@ def _bop(d, id_api, t023="#", s181="0"):
     return d.s("bop_m", id_api, "D021USD_7", freq="M", t023=t023, s181=s181)
 
 
+def _gs(d, t023):
+    """Goods and services, monthly: API first; months the API lacks yet from the BOP_m file."""
+    f = nbu_files.bop_trade_m(d.nbu_file("bop_m"))
+    k = "EXP" if t023 == "1" else "IMP"
+    return _bop(d, "G_S", t023=t023).combine_first(f[f"{k}_G"] + f[f"{k}_S"])
+
+
 def _budget(d, id_api, level="SBU"):
     return ytd_to_q(d.s("budget_m", id_api, "F_M_VC", mcr200p=level))
 
@@ -312,9 +319,9 @@ ANCHOR_RECIPES = [
     Recipe("EMPL", "", "", "НБУ API (Госстат, ОРС)", "Занятые 15–70, из накопленных средних; обследование прекращено после 2021", lambda d: q_label(_lfs(d, "lmss_actnas_ep1570ap_"))),
     Recipe("UNEMP", "", "", "НБУ API (Госстат, ОРС)", "Безработные / экономически активные 15–70; после 2021 нет данных", _unemp),
     Recipe("WAGE_NOM", "", "", "НБУ API (Госстат); НБУ Wages_m.xlsx; пропуски из MacroStat", "Средняя месячная зарплата, среднее за квартал; 2010–2012 из файла НБУ Wages_m; оставшиеся пропуски 2022–2024 из квартальных данных Госстата (лист Salary)", _wage),
-    Recipe("EXP_USD", "", "", "НБУ API (платёжный баланс)", "Товары и услуги, кредит, сумма месяцев", lambda d: m_to_q(_bop(d, "G_S", t023="1"), "SUM")),
-    Recipe("IMP_USD", "", "", "НБУ API (платёжный баланс)", "Товары и услуги, дебет, сумма месяцев", lambda d: m_to_q(_bop(d, "G_S", t023="2"), "SUM")),
-    Recipe("TRADE_BAL", "", "", "расчёт", "EXP_USD − IMP_USD", lambda d: m_to_q(_bop(d, "G_S", t023="1") - _bop(d, "G_S", t023="2"), "SUM")),
+    Recipe("EXP_USD", "", "", "НБУ API и BOP_m.xlsx (платёжный баланс)", "Товары и услуги, кредит, сумма месяцев; последние месяцы до API из файла BOP_m", lambda d: m_to_q(_gs(d, "1"), "SUM")),
+    Recipe("IMP_USD", "", "", "НБУ API и BOP_m.xlsx (платёжный баланс)", "Товары и услуги, дебет, сумма месяцев; последние месяцы до API из файла BOP_m", lambda d: m_to_q(_gs(d, "2"), "SUM")),
+    Recipe("TRADE_BAL", "", "", "расчёт", "EXP_USD − IMP_USD", lambda d: m_to_q(_gs(d, "1") - _gs(d, "2"), "SUM")),
     Recipe("RES_USD", "", "", "НБУ API", "Официальные резервные активы на конец квартала", lambda d: m_to_q(d.s("reserves_m", "RES_OffReserveAssets", "T071USD_7"), "END")),
     Recipe("GFCF", "", "", "НБУ API (Госстат)", "ea_gdp_es_gfcf, F_", lambda d: q_label(d.s("gdp_q", "ea_gdp_es_gfcf", "F_"))),
     Recipe("CFC", "", "", "Всемирный банк (оценка)", "NY.ADJ.DKAP.GN.ZS × ВНД, годовое значение поровну на кварталы; ряд заканчивается 2021", _cfc),

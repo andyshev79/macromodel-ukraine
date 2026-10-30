@@ -169,7 +169,9 @@ EUR_SC = SL.EURUSD  # SCENARIOS: EUR/USD by scenario, active columns L:N
 R = QROW
 year = lambda i: QS[i][:4]
 pc = lambda i, k=1: QC[i - k]
-FACT_TRADE, FACT_FX = 5, 6  # last quarter with facts: trade, FDI, financing 2026Q2; rate and reserves 2026Q3
+FACT_TRADE, FACT_FX = 5, 6  # last quarter with facts: remittances, FDI, financing 2026Q2; rate and reserves 2026Q3
+# exports and imports: the last quarter with all three months in the history (BOP_m file runs ahead of the API)
+FACT_EXPIMP = max(i for i, ok in enumerate(hq.reindex(QS)[["EXP_USD", "IMP_USD"]].notna().all(axis=1)) if ok)
 rem_part = dq.loc["2026Q3"]
 rem_q3 = round(float(rem_part["REM_TOT_PART"]) * 3 / int(rem_part["REM_MONTHS"]))
 rem_g = dq["REM_TOT"] / dq["REM_TOT"].shift(4) * 100 - 100
@@ -229,8 +231,9 @@ put("SEAS_EXP", line("SEAS_EXP", "Доля квартала в экспорте 
 put("SEAS_IMP", line("SEAS_IMP", "Доля квартала в импорте года", "среднее 2023–2025", lambda i, c: round(float(seas.loc[QS[i][-1], "IMP_USD"]), 3)))
 for code, src, arow, name in (("EXPQ", "EXP_USD", 24, "Экспорт товаров и услуг"), ("IMPQ", "IMP_USD", 26, "Импорт товаров и услуг")):
     sh = R["SEAS_EXP"] if code == "EXPQ" else R["SEAS_IMP"]
-    put(code, line(code, name, "факт; дальше год (раздел 2) × доля квартала; 2026 — остаток года после 1 полугодия",
-                   lambda i, c, src=src, arow=arow, sh=sh: round(float(hq.loc[QS[i], src])) if i <= FACT_TRADE else
+    put(code, line(code, name, "факт; дальше год (раздел 2) × доля квартала; 2026 — остаток года после 1 полугодия "
+                   "(факт 3 кв. меняет год, 4 кв. остаётся по модели)",
+                   lambda i, c, src=src, arow=arow, sh=sh: round(float(hq.loc[QS[i], src])) if i <= FACT_EXPIMP else
                    (f"=($E${arow}-SUM($H${R[code]}:$I${R[code]}))*{c}{sh}/($J${sh}+$K${sh})" if year(i) == "2026" else f"={YC[year(i)]}${arow}*{c}{sh}"),
                    "идёт в ANCHORS"))
 put("TBQ", line("TBQ", "Сальдо торговли", "экспорт − импорт", lambda i, c: f"={c}{R['EXPQ']}-{c}{R['IMPQ']}"))
