@@ -75,6 +75,6 @@ def test_external_prices_are_annual_inputs():
     out = json.loads(subprocess.run([sys.executable, "sheet/cpi_blocks_payload.py"], capture_output=True, text=True,
                                     env={**__import__("os").environ, "PYTHONPATH": "."}, check=True).stdout)
     assert not any(k.startswith("SCENARIOS!") for k in out)
-    rows = next(v for k, v in out.items() if k.startswith("B3_PRICES!A37"))
+    rows = next(v for k, v in out.items() if k.startswith("B3_PRICES!A29"))
     brent = next(r for r in rows if r and r[0] == "BRENT")
     assert brent[6] == "=INDEX(SCENARIOS!$L$43:$N$43;1)" and brent[14] == "=INDEX(SCENARIOS!$L$43:$N$43;3)"

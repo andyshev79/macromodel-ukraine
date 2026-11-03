@@ -130,7 +130,7 @@ HV = SL.Y["HARVEST"]  # the annual row shows B10's harvest (active scenario); si
 out[f"SCENARIOS!A{HV}:O{HV}"] = [["Урожай шести культур (считает B10_AGRO, активный сценарий)", "млн т"] + [""] * 9
                                  + [f"=B10_AGRO!{c}25" for c in "EFG"]
                                  + [f"Не вводить: урожай считает B10_AGRO по культурам (погода и площадь — строки {SL.WEATHER}–{SL.AREA}). "
-                                    "Рост урожая идёт в ИПЦ «сырые продукты» (B3_PRICES строка 44)"]]
+                                    "Рост урожая идёт в ИПЦ «сырые продукты» (B3_PRICES строка 36)"]]
 from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
 
 json.dump(protect(out), sys.stdout, ensure_ascii=False)
