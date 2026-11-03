@@ -62,15 +62,19 @@ def test_protect_blanks_annual_inputs_in_other_payloads():
     assert row[:2] == ["x", "y"] and row[2:11] == [None] * 9 and row[11] == "=L"
 
 
-def test_brent_is_read_by_quarter_without_an_annual_row():
-    """2026-10-29, Andrey: no duplicate Brent row; B3_PRICES takes each forecast quarter from the active quarterly row."""
+def test_external_prices_are_annual_inputs():
+    """2026-11-03, Andrey ("часть 2"): external prices and rates are one value a year in the annual table; their quarterly
+    rows are gone, and B3_PRICES puts the year's Brent into every quarter of that year."""
     import json, subprocess, sys
     from macromodel import scenario_layout as SL
-    assert not hasattr(SL, "BRENT")
+    from sheet.scenarios_quarterly_payload import ANNUAL_IN
+    assert set(SL.EXTERNAL) <= set(ANNUAL_IN) and not set(SL.EXTERNAL) & set(ROW) and set(ROW) == {"CAP", "PORTS", "DEF", "MET"}
+    assert SL.BRENT == SL.ANNUAL_LAST == 43 and SL.EXTRA_FIN == 74 and SL.LABOUR == 103 and SL.LIMITS == 137
+    out = build()
+    assert not any(k == f"SCENARIOS!C{SL.Y[c]}:K{SL.Y[c]}" for c in SL.EXTERNAL for k in out)  # typed, never overwritten
     out = json.loads(subprocess.run([sys.executable, "sheet/cpi_blocks_payload.py"], capture_output=True, text=True,
                                     env={**__import__("os").environ, "PYTHONPATH": "."}, check=True).stdout)
     assert not any(k.startswith("SCENARIOS!") for k in out)
     rows = next(v for k, v in out.items() if k.startswith("B3_PRICES!A37"))
     brent = next(r for r in rows if r and r[0] == "BRENT")
-    act = ROW["BRENT"] + 3
-    assert brent[6] == f"=SCENARIOS!E{act}" and brent[14] == f"=SCENARIOS!M{act}"
+    assert brent[6] == "=INDEX(SCENARIOS!$L$43:$N$43;1)" and brent[14] == "=INDEX(SCENARIOS!$L$43:$N$43;3)"

@@ -1,4 +1,8 @@
-"""Logic checks of the scenario inputs and boundary values (bottom of SCENARIOS, 2026-10-25).
+"""Logic checks of the scenario inputs and boundary values (sheet SCENARIO_CHECKS since 2026-11-03).
+
+Built as before with the table at SCENARIOS row SL.LIMITS, then moved to its own sheet: rows of the table
+start at row 1 there, references to the inputs get the SCENARIOS! prefix. SCENARIOS keeps one line at
+SL.LIMITS with the count of warnings (Andrey, 03.11: the scenario sheet was too heavy to fill in).
 
 Andrey asked for checks inside SCENARIOS so that scenarios do not contradict each other or the data,
 and for boundary values (total port capacity, total generation and similar). Three kinds of checks:
@@ -9,6 +13,7 @@ limits (a scenario value above a physical boundary), ordering (pessimistic <= ba
 Output: JSON {range: 2D list}, formulas in ru_RU syntax (";" separators).
 """
 import json
+import re
 import sys
 
 from macromodel import scenario_layout as SL
@@ -147,5 +152,25 @@ rows = [
      "мужчины уезжают за границу), объясните его в столбце O строки параметра; если нет — исправьте значение. "
      "Порядок сценариев проверяется для 2027–2028: 2026 у всех сценариев почти факт."],
 ]
-out = {f"SCENARIOS!A{FIRST}:F{FIRST + len(rows) - 1}": rows}
+SHEET = SL.CHECKS_SHEET
+REF = re.compile(r"(?<![A-Za-z0-9_!$.])(\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?)(?![\dA-Za-z_(!])")
+CELL = re.compile(r"(\$?[A-Z]{1,3}\$?)(\d+)")
+
+
+def move(text: str, formula: bool) -> str:
+    """Table rows (>= FIRST) move to row 1 of SHEET; in formulas the input rows (< FIRST) get the SCENARIOS! prefix."""
+    def ref(m):
+        r = m.group(1)
+        if int(CELL.search(r).group(2)) >= FIRST:
+            return CELL.sub(lambda c: f"{c.group(1)}{int(c.group(2)) - FIRST + 1}", r)
+        return f"SCENARIOS!{r}" if formula else r
+    parts = text.split('"')
+    return '"'.join(REF.sub(ref, x) if i % 2 == 0 else x for i, x in enumerate(parts))
+
+
+moved = [[move(v, v.startswith("=")) if isinstance(v, str) else v for v in r] for r in rows]
+moved[1] = [rows[1][0].replace("(строка 16)", "(SCENARIOS строка 16)")]
+count = f"{SHEET}!D{CHK_FIRST - 2 - FIRST + 1}"  # the count row is two rows above the first check (header between)
+out = {f"{SHEET}!A1:F{len(rows)}": moved,
+       f"SCENARIOS!A{FIRST}:D{FIRST}": [[f'=HYPERLINK("#gid={SL.CHECKS_GID}";"Пределы и проверка логики сценариев — лист {SHEET}")', "", "Замечаний:", f"={count}"]]}
 json.dump(out, sys.stdout, ensure_ascii=False)
