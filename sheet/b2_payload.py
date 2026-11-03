@@ -47,7 +47,7 @@ top = [
     [""],
     ["Что считает", "Реальные компоненты ВВП по расходам: C домохозяйств, C госуправления, ВНОК, экспорт, импорт, запасы"],
     ["Берёт", "B1_REAL (рост ВВП по производству, порты, оборона), COEFS"],
-    ["Пишет в ANCHORS", "GDP_REAL_E; сверка с GDP_REAL_P на листе CHECKS"],
+    ["Пишет в ANCHORS", "GDP_REAL_E = GDP_REAL_P: с 03.11.2026 импорт — замыкающая статья (раздел 6); B5 переводит его в доллары"],
     ["Статус", "в работе: версия 1"],
     ["Как читать", "Как в B1: годовой рост компонента применяется к тому же кварталу прошлого года. Импорт вычитается."],
     [""],
@@ -100,14 +100,21 @@ GFCF_MET = 0.03
 # and a fall cannot take more than the share K (2026-10-28; was K x % change of the ports).
 port_g = lambda k, c, p: f"(((1-{k})+{k}*{c}$12/$D$12)/((1-{k})+{k}*{p}$12/$D$12)*100-100)"
 
+# Government consumption (03.11.2026): section O (pay) + defence purchases + education and health. Purchases follow real
+# defence spending 1 : 1, so the end of the war takes imported arms out of G and, through the closing item, out of imports.
+# (A first version used defence spending without soldiers' pay; B4 MIL_REAL swings by a third in 2027 and blew purchases up.)
+G_CIV_ROW, IMP_SH_PEACE_ROW, IMP_SH_WAR_ROW = 252, 254, 255
+G_CIV = f"COEFS!$E${G_CIV_ROW}"
+CIV_SH = 0.16
+CIV_SH_TXT = f"{CIV_SH:.2f}".replace(".", ",")
+PROC_TXT = f"{1 - CIV_SH - next(r['coef'] for r in pc if (r['eq'], r['var']) == ('GDPE_GOV', 'O_SH')):.2f}".replace(".", ",")
 eqs = {
     "HH": (f"{kv('HH', 'const')} + {kv('HH', 'REAL_WAGE')} × рост реальных трудовых доходов + влияние ставки (B7) + эффект мира "
            "(только кварталы после прекращения огня, раздел 5)",
            lambda c, p: f"={C('HH','const')}+{C('HH','REAL_WAGE')}*{c}$14+B7_MONETARY!{c}39+" + peace_y(c).format(r=PHH)),
-    "GOV": (f"{pnum('GDPE_GOV', 'O_SH')} × раздел O из B1 (численность военных и штат) + остальное × "
-            f"({kv('GOV', 'const')} + {kv('GOV', 'REAL_DEF')} × рост реальных расходов на оборону)",
-            lambda c, p: f"={P('GDPE_GOV','O_SH')}*B1_REAL!{c}$74+(1-{P('GDPE_GOV','O_SH')})*"
-                         f"({C('GOV','const')}+{C('GOV','REAL_DEF')}*{c}$15)"),
+    "GOV": (f"{pnum('GDPE_GOV', 'O_SH')} × раздел O из B1 (численность военных и штат) + {PROC_TXT} × оборонные закупки "
+            f"(1 : 1 к реальным расходам на оборону, строка 15) + {CIV_SH_TXT} × образование и здравоохранение B1",
+            lambda c, p: f"={P('GDPE_GOV','O_SH')}*B1_REAL!{c}$74+(1-{P('GDPE_GOV','O_SH')}-{G_CIV})*{c}$15+{G_CIV}*B1_REAL!{c}$30"),
     "GFCF": ("1,5 + 2,0 × рост ВВП (акселератор) + влияние ставки (B7) + 0,03 × изменение загрузки металлургии "
              "(капвложения металлургов и руды) + восстановление (только кварталы после прекращения огня, раздел 5)",
              lambda c, p: f"={C('GFCF','const')}+{C('GFCF','GDP_P')}*{c}$11+B7_MONETARY!{c}40"
@@ -117,12 +124,12 @@ eqs = {
             lambda c, p: f"={AGRO_SH}*B10_AGRO!{c}41+(1-{AGRO_SH})*({C('EXP','const')}+{port_g(C('EXP','PORTS'), c, p)}"
                          f"+COEFS!$E${SHOCK_ROW['MET_X']}*(B1_REAL!{c}$16-B1_REAL!{p}$16)"
                          f"+COEFS!$E${REC.CR['REC_ORE_XEXP']}*(B8_CAPACITY!{B8Y[c]}{RL.ACT['ORE_XTRA']}-B8_CAPACITY!{B8Y[p]}{RL.ACT['ORE_XTRA']}))"),
-    "IMP": (f"оборонный ({pnum('GDPE_IMP', 'DEF_SH')}) × рост реальных расходов на оборону + гражданский × "
-            f"({kv('IMP', 'const')} + {kv('IMP', 'DOM_DEMAND')} × рост внутреннего спроса)",
-            lambda c, p: f"={P('GDPE_IMP','DEF_SH')}*{c}$15+(1-{P('GDPE_IMP','DEF_SH')})*"
-                         f"({C('IMP','const')}+{C('IMP','DOM_DEMAND')}*{c}$16)"),
-    "INV": ("растут вместе с ВВП по производству; в кварталах (раздел 3) плюс зерно, которое не вывезли порты (B10_AGRO строка 42)",
-            lambda c, p: f"={C('INV','GDP_P')}*{c}$11"),
+    "IMP": ("замыкающая статья: C + G + I + X + запасы − ВВП по производству, по кварталам (раздел 3); "
+            "что спрос берёт сверх своего производства, ввозится (раздел 6, правило В20 в README)",
+            lambda c, p: f"={sumif(c + '$19', 36)}/{sumif(c + '$19-1', 36)}*100-100"),
+    "INV": ("вклад, п.п. ВВП: та же доля в ВВП по производству, что в том же квартале год назад, плюс зерно, "
+            "которое не вывезли порты (B10_AGRO строка 42)",
+            lambda c, p: f"=({sumif(c + '$19', 37)}-{sumif(c + '$19-1', 37)})/{sumif(c + '$19-1', 38)}*100"),
 }
 names = {k: v[1] for k, v in COMPONENTS.items()} | {"INV": "Запасы и статистическое расхождение"}
 rows = [["2. Рост реальных компонентов, % г/г"], ["Код", "Компонент", "Уравнение", 2025, 2026, 2027, 2028]]
@@ -132,8 +139,9 @@ for c in ["HH", "GOV", "GFCF", "EXP", "IMP", "INV"]:
     rows.append([f"GDPE_{c}", names[c], txt, hist] + [f(cc, pp) for cc, pp in zip("EFG", "DEF")])
 rows.append(["GDP_REAL_E", "ВВП по расходам", "C + G + I + X − M + запасы"]
             + [f"={sumif(c + '$19', 38)}/{sumif(c + '$19-1', 38)}*100-100" for c in "DEFG"])
-rows.append(["GAP_P_E", "Разрыв: ВВП по производству / по расходам − 1", "%, порог на листе CHECKS"]
-            + [f"=B1_REAL!{c}31-{c}26" for c in "DEFG"])
+rows.append(["IMP_SH", "Доля импорта во внутреннем спросе (C + G + I)", "реальные, за год; коридор на листе CHECKS строка 6 "
+             "(с 03.11.2026 вместо разрыва: ВВП по расходам = ВВП по производству по построению)"]
+            + [f"={sumif(c + '$19', 36)}/({sumif(c + '$19', 32)}+{sumif(c + '$19', 33)}+{sumif(c + '$19', 34)})" for c in "DEFG"])
 out["B2_DEMAND!A18:G27"] = rows
 
 lv = real_levels_q()
@@ -158,12 +166,14 @@ def qcell(code, r, q):
     if code in ("HH", "GFCF"):  # the year's average peace effect out, this quarter's effect in
         pr = PHH if code == "HH" else PI
         g = f"({g}-SUMIF($H$30:$BK$30;{q}$30;$H${pr}:$BK${pr})/4+{q}{pr})"
+    if code == "IMP":  # closing item (03.11.2026): what demand takes beyond domestic production is imported
+        return f"={q}32+{q}33+{q}34+{q}35+{q}37-ANCHORS!{q}6"
     if code != "INV":
         return f"={p4}{r + 12}*(1+{g}/100)"
     # inventories are a flow: grain the ports cannot ship adds to them this year (B10_AGRO row 42, change of the
     # carry-over stock), last year's addition is taken out so it does not pile up year after year
     stock = lambda y, x: f"N(INDEX(B10_AGRO!$D$42:$G$42;MATCH({y};B10_AGRO!$D$10:$G$10;0)))/100*{x}35"
-    return (f"={p4}37*(1+{g}/100)+{AGRO_SH}*({stock(q + '$30', p4)}-{stock(q + '$30-1', p8)})")
+    return (f"={p4}37*ANCHORS!{q}6/ANCHORS!{p4}6+{AGRO_SH}*({stock(q + '$30', p4)}-{stock(q + '$30-1', p8)})")
 
 
 def _ci(c):
@@ -212,6 +222,70 @@ out["COEFS!A35:L35"] = [["GVA_OTHER_HH", "B1", "GVA_OTHER", "GDPE_HH", round(flo
                          round(float(link["se"]["HH"]), 2), round(float(link["coef"]["HH"] / link["se"]["HH"]), 1),
                          "2016–2025", "оценка МНК 2016–2025, годовые, дамми 2022", round(float(link["r2"]), 2),
                          "2026-10-21", "Торговля и госуправление к спросу не привязаны: оценка дала отрицательный наклон"]]
+# --- Section 6 (03.11.2026): imports are the closing item; the BoP squeeze and the check against NBU facts
+SEC6 = 57
+B5Q = {col(LAST_COL - 6 + i): col(3 + i) for i in range(16)}  # B2 AV..BK (2025Q1..2028Q4) -> B5_EXTERNAL D..S
+sec6 = [["6. Импорт — замыкающая статья: сжатие из-за нехватки валюты и сверка с фактом НБУ"],
+        ["Код", "Показатель", "Как считается", "", "", "", "", "=H31"],
+        ["IMP_CUT_R", "Сжатие импорта (B5 раздел 7), реальное", "млн грн 2021: сжатие USD / импорт USD × реальный импорт (строка 36)"],
+        ["GDPE_HH_POST", "Потребление после сжатия", "строка 32 − сжатие × доля C в C + I: товаров нет — их не потребили"],
+        ["GDPE_GFCF_POST", "ВНОК после сжатия", "строка 34 − сжатие × доля I в C + I"],
+        ["GDPE_IMP_POST", "Импорт после сжатия", "строка 36 − сжатие; ВВП не меняется: спрос и импорт падают на одно и то же"],
+        ["IMP_SH_Q", "Доля импорта во внутреннем спросе", "строка 36 / (C + G + I)"],
+        ["IMP_NBU", "Импорт модели против факта НБУ, п.п.", "квартал с фактом НБУ, но без нацсчетов: рост реального импорта − "
+         "(рост импорта в USD − рост цен импорта B5 строка 25); проверка на CHECKS строка 46"]]
+out[f"B2_DEMAND!A{SEC6}:H{SEC6 + 7}"] = sec6
+q4c = lambda q: col(_ci(q) - 4)
+cut = lambda q: f"IFERROR(B5_EXTERNAL!{B5Q[q]}92/B5_EXTERNAL!{B5Q[q]}57;0)*{q}36" if q in B5Q else "0"
+r6 = SEC6 + 2
+out[f"B2_DEMAND!H{SEC6 + 1}:BK{SEC6 + 7}"] = [
+    [f"={q}$31" for q in allq],
+    ["" if q not in B5Q else "=" + cut(q) for q in allq],
+    ["" if q not in B5Q else f"={q}32-{q}{r6}*{q}32/({q}32+{q}34)" for q in allq],
+    ["" if q not in B5Q else f"={q}34-{q}{r6}*{q}34/({q}32+{q}34)" for q in allq],
+    ["" if q not in B5Q else f"={q}36-{q}{r6}" for q in allq],
+    [f"={q}36/({q}32+{q}33+{q}34)" for q in allq],
+    ["" if _ci(q) < LAST_COL else
+     f"=IF(ISFORMULA(B5_EXTERNAL!{B5Q[q]}57);\"\";({q}36/{q4c(q)}36-1)*100-((B5_EXTERNAL!{B5Q[q]}57/B5_EXTERNAL!{B5Q[q4c(q)]}57)"
+     f"/(1+INDEX(B5_EXTERNAL!$E$25:$G$25;{q}$30-2025)/100)-1)*100)" for q in allq],
+]
+out[f"COEFS!A{G_CIV_ROW}:L{IMP_SH_WAR_ROW}"] = [
+    ["GDPE_GOV_CIV", "B2", "GDPE_GOV", "CIV_SH", CIV_SH, "", "", "2025", "оценка", "", "2026-11-03",
+     "Доля образования и здравоохранения в потреблении госуправления (бюджеты 2025: ~550 из ~3500 млрд грн). Оценка Claude"],
+    [""] * 12,
+    ["IMP_SH_PEACE", "B2", "IMP_SH", "PEACE", 0.47, "", "", "2015–2021", "оценка", "", "2026-11-03",
+     "Верх коридора доли импорта во внутреннем спросе в мирные годы: максимум 2015–2021 0,43 + запас. Выше — спрос завышен "
+     "или производство занижено; объяснить"],
+    ["IMP_SH_WAR", "B2", "IMP_SH", "WAR", 0.52, "", "", "2022–2026", "оценка", "", "2026-11-03",
+     "Верх коридора в годы войны: 2024–2025 0,45–0,46, 1 пол. 2026 0,54 (сезонно выше года), оборона и энергия. Оценка Claude"],
+]
+# CHECKS: row 6 was production vs expenditure (now equal by construction); rows 46-50 new
+yrs = lambda c: f"B2_DEMAND!$H$30:$BK$30;{c}$4"
+sh = lambda c: (f"=IFERROR(SUMIF({yrs(c)};B2_DEMAND!$H$36:$BK$36)/(SUMIF({yrs(c)};B2_DEMAND!$H$32:$BK$32)"
+                f"+SUMIF({yrs(c)};B2_DEMAND!$H$33:$BK$33)+SUMIF({yrs(c)};B2_DEMAND!$H$34:$BK$34));\"\")")
+peace = lambda c: f"OR({c}$4<2022;SUMIF({yrs(c)};B2_DEMAND!$H$53:$BK$53)=4)"
+CY = [col(3 + i) for i in range(14)]  # D..Q = 2015..2028
+out["CHECKS!A6:Q7"] = [
+    ["Импорт (замыкающая статья) / внутренний спрос", "Реальный импорт / (C + G + I) за год. С 03.11.2026 ВВП по расходам = ВВП по "
+     "производству по построению, импорт замыкает баланс (B2 раздел 6). Не выше коридора: мир 0,47, война 0,52 (COEFS 254–255)",
+     "0,47 / 0,52"] + [sh(c) for c in CY],
+    ["  статус", "", ""] + [f"=IF({c}6=\"\";\"нет данных\";IF({c}6>IF({peace(c)};COEFS!$E${IMP_SH_PEACE_ROW};COEFS!$E${IMP_SH_WAR_ROW});"
+                            f"\"ВНИМАНИЕ\";\"OK\"))" for c in CY],
+]
+dom = lambda c, k: f"(SUMIF({yrs(c)}{k};B2_DEMAND!$H$32:$BK$32)+SUMIF({yrs(c)}{k};B2_DEMAND!$H$33:$BK$33)+SUMIF({yrs(c)}{k};B2_DEMAND!$H$34:$BK$34))"
+out["CHECKS!A46:Q50"] = [
+    ["Импорт: модель против факта НБУ", "Рост реального импорта B2 − (рост импорта НБУ в USD − рост цен импорта), п.п., по кварталам, "
+     "где факт НБУ уже есть, а нацсчетов ещё нет (B2_DEMAND строка 64); по модулю не выше порога", 5]
+    + [f"=IFERROR(MAX(ARRAYFORMULA(IF((B2_DEMAND!$BB$30:$BK$30={c}$4)*ISNUMBER(B2_DEMAND!$BB$64:$BK$64);ABS(B2_DEMAND!$BB$64:$BK$64);\"\")));\"\")"
+       if c >= "M" else "" for c in CY],
+    ["  статус", "", ""] + [f"=IF(OR({c}46=\"\";{c}46=0);\"нет данных\";IF({c}46>$C$46;\"ВНИМАНИЕ\";\"OK\"))" for c in CY],
+    [""],
+    ["Импорт г/г против внутреннего спроса", "Рост реального импорта − рост C + G + I, п.п.; по модулю не выше порога "
+     "(2016–2025: до 9 п.п.). Больше — объяснить: оборона, энергия, восстановление, сжатие", 10]
+    + ["" if c == "D" else f"=IFERROR((SUMIF({yrs(c)};B2_DEMAND!$H$36:$BK$36)/SUMIF({yrs(c)}-1;B2_DEMAND!$H$36:$BK$36)-"
+       f"{dom(c, '')}/{dom(c, '-1')})*100;\"\")" for c in CY],
+    ["  статус", "", ""] + ["" if c == "D" else f"=IF({c}49=\"\";\"нет данных\";IF(ABS({c}49)>$C$49;\"ВНИМАНИЕ\";\"OK\"))" for c in CY],
+]
 from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
 
 json.dump(protect(out), sys.stdout, ensure_ascii=False)

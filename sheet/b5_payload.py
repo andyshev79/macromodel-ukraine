@@ -29,6 +29,7 @@ col = lambda i: chr(ord("A") + i) if i < 26 else chr(ord("A") + i // 26 - 1) + c
 QS = [f"{y}Q{q}" for y in (2025, 2026, 2027, 2028) for q in (1, 2, 3, 4)]
 QC = [col(3 + i) for i in range(16)]  # D..S
 AC = {q: col(47 + i) for i, q in enumerate(QS)}  # ANCHORS AV..BK
+B2Q = [col(47 + i) for i in range(16)]  # B2_DEMAND AV..BK = 2025Q1..2028Q4 (same columns as ANCHORS)
 YC = {"2025": "D", "2026": "E", "2027": "F", "2028": "G"}  # annual columns of this sheet and of B6
 PY = {"2026": "D", "2027": "E", "2028": "F"}
 Q0 = {"2025": 0, "2026": 4, "2027": 8, "2028": 12}
@@ -106,7 +107,8 @@ rows = [
     ["CPI", "ИПЦ Украины", "%"] + [f"=B3_PRICES!{c}20" for c in "DEFG"] + ["B3_PRICES"],
     ["STEEL_IMP", "Доп. импорт проката вместо своего (металлурги стоят)", "млн USD", 0]
     + [f"=COEFS!$E${STEEL_FIRST}*COEFS!$E${STEEL_FIRST + 1}/1000*SUMPRODUCT(1-B1_REAL!{STEEL_Q[c]}/100)/4" for c in "EFG"]
-    + ["свой прокат × простой металлургии по кварталам (B1_REAL строка 117) × цена; входит в импорт"],
+    + ["свой прокат × простой металлургии (B1_REAL строка 117) × цена; справочно: с 03.11.2026 входит в импорт сам "
+       "(металлургия падает в B1, спрос на прокат в B2 остаётся, разница ввозится)"],
     ["2. Торговля и платёжный баланс, млн USD"],
     ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
     ["EXP_P", "Рост цен экспорта в USD", f"{k('EXP_P','const')} + {k('EXP_P','PX')} × рост цен сырья", round(float(a["EXP_P"]), 1)]
@@ -115,8 +117,9 @@ rows = [
     + EFG(lambda c, p: f"={p}24*(1+{c}11/100)*(1+{c}23/100)"),
     ["IMP_P", "Рост цен импорта в USD", f"{k('IMP_P','const')} + {k('IMP_P','TTF')} × рост цены газа", round(float(a["IMP_P"]), 1)]
     + EFG(lambda c, p: f"={C('IMP_P','const')}+{C('IMP_P','TTF')}*{c}16") + ["%, R² 0,58"],
-    ["IMP_USD", "Импорт товаров и услуг", "(прошлый год − прокат) × реальный рост × рост цен + прокат", round(float(a["IMP_USD"]))]
-    + EFG(lambda c, p: f"=({p}26-{p}20)*(1+{c}12/100)*(1+{c}25/100)+{c}20"),
+    ["IMP_USD", "Импорт товаров и услуг", "сумма кварталов (раздел 5): реальный импорт B2 (замыкающая статья) × цены импорта",
+     round(float(a["IMP_USD"]))]
+    + [f"=SUM({q4(c, 'IMPQ')})" for c in "EFG"] + ["с 03.11.2026: объём не из уравнения, а из баланса ВВП (B2 раздел 6)"],
     ["TRADE_BAL", "Сальдо торговли", "экспорт − импорт"] + [f"={c}24-{c}26" for c in "DEFG"],
     ["REMIT", "Частные переводы (оплата труда + трансферты)", "сумма кварталов (раздел 5)", round(float(rem_y["2025"]))]
     + [f"=SUM({q4(c, 'REMQ')})" for c in "EFG"] + ["лист Dollar (НБУ); до 2026-10-26 здесь были только трансферты"],
@@ -231,6 +234,13 @@ put("SEAS_EXP", line("SEAS_EXP", "Доля квартала в экспорте 
 put("SEAS_IMP", line("SEAS_IMP", "Доля квартала в импорте года", "среднее 2023–2025", lambda i, c: round(float(seas.loc[QS[i][-1], "IMP_USD"]), 3)))
 for code, src, arow, name in (("EXPQ", "EXP_USD", 24, "Экспорт товаров и услуг"), ("IMPQ", "IMP_USD", 26, "Импорт товаров и услуг")):
     sh = R["SEAS_EXP"] if code == "EXPQ" else R["SEAS_IMP"]
+    if code == "IMPQ":  # 03.11.2026: the same quarter a year ago × real growth of B2 imports (closing item) × import prices
+        put(code, line(code, name, "факт НБУ; дальше тот же квартал год назад × рост реального импорта B2 (строка 36, замыкающая "
+                       "статья ВВП по расходам) × рост цен импорта года (строка 25)",
+                       lambda i, c: round(float(hq.loc[QS[i], "IMP_USD"])) if i <= FACT_EXPIMP else
+                       f"={pc(i, 4)}{R['IMPQ']}*B2_DEMAND!{B2Q[i]}36/B2_DEMAND!{B2Q[i - 4]}36*(1+${YC[year(i)]}$25/100)",
+                       "идёт в ANCHORS (после сжатия, раздел 7)"))
+        continue
     put(code, line(code, name, "факт; дальше год (раздел 2) × доля квартала; 2026 — остаток года после 1 полугодия "
                    "(факт 3 кв. меняет год, 4 кв. остаётся по модели)",
                    lambda i, c, src=src, arow=arow, sh=sh: round(float(hq.loc[QS[i], src])) if i <= FACT_EXPIMP else
