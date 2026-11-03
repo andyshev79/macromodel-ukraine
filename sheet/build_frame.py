@@ -306,6 +306,8 @@ def a(code, yi, lag=0):
 
 CHECKS = [
     ("Сверху вниз / снизу вверх", None, None, None, None),
+    # 03.11.2026: imports close GDP by expenditure (B2 section 6), so P = E; row 6 is written by sheet/b2_payload.py
+    # (import share of domestic demand against the war / peace corridor)
     ("Реальный ВВП: производство против расходов", "ВВП по производству / ВВП по расходам − 1", 0.01,
      lambda yi: f'=IFERROR({a("GDP_REAL_P", yi)}/{a("GDP_REAL_E", yi)}-1,"")', "abs"),
     ("Мощности", None, None, None, None),
