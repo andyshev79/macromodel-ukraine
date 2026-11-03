@@ -6,9 +6,11 @@ The exchange rate rule uses last year's reserves, so B2-B5 have no circular refe
 import json
 import sys
 
+import pandas as pd
+
 from macromodel import scenario_layout as SL
 from macromodel.blocks import external as X
-from macromodel.blocks.external import annual, coef_table
+from macromodel.blocks.external import EXT, annual, coef_table
 from macromodel.blocks.real_sector import quarterly
 
 COEF_FIRST = 53  # B1 5-22, B2 23-35, B3 36-44, B4 45-52
@@ -73,12 +75,19 @@ out[f"COEFS!A{BOP_FIRST}:L{BOP_FIRST + 1}"] = [
      "Доп. девальвация следующего года, п.п. на 1% вынужденного сжатия импорта. 2014–2015: резервы ~1 месяц импорта, "
      "импорт −30% в год, гривна −40% и −50%. Оценка Claude"],
 ]
-EXTRA = {"База": 1500, "Пессимистичный": 0, "Оптимистичный": 3000}
+# mln USD per quarter, 2026Q3..2028Q4 (2026Q3 is a fact quarter and unused). Research 03.11.2026, see docs/model_logic.md section 5
+EXTRA = {"База": [1500, 2500] + [2500] * 4 + [1500] * 4,
+         "Пессимистичный": [0, 0] + [1000] * 4 + [0] * 4,
+         "Оптимистичный": [3000, 5000] + [4000] * 4 + [3000] * 4}
+EXTRA_NOTE = ("Исследование 03.11.2026. 2026: остаток денег ЕС на конец года — 33,7 млрд EUR (на 02.10, из них 17,1 млрд — поддержка "
+              "бюджета); III кв. дал меньше ожиданий (задержка реформ), НБУ ждёт добора в IV кв. 2027: ЕС — 45 млрд EUR (31,7 млрд на "
+              "оборонную промышленность, часть тратится на украинское производство и приходит валютой сверх бюджетных 52,6 млрд), плюс "
+              "досрочная выплата 2027 года. 2028: резерв для Украины в бюджете ЕС 2028–2034 (100 млрд EUR предложение) и программа МВФ "
+              "до 2029; непокрытый разрыв МВФ ~17–20 млрд USD. Оценка Claude")
 out[f"SCENARIOS!A{XF - 1}:O{XF + 3}"] = [
     ["Дополнительное финансирование, если резервы ниже порога (B5_EXTERNAL раздел 7)"]] + [
-    [f"Готовность партнёров дать дополнительно — {k}", "млн USD за квартал, максимум", ""] + [v] * 10 +
-    (["сумма за квартал", "Оценка Claude: база — расширение программы МВФ и ЕС ~6 млрд USD в год; пессимистичный — "
-      "усталость партнёров, ничего сверх обещанного; оптимистичный — до 12 млрд USD в год"] if k == "База" else ["", ""])
+    [f"Готовность партнёров дать дополнительно — {k}", "млн USD за квартал, максимум", ""] + v +
+    (["сумма за квартал", EXTRA_NOTE] if k == "База" else ["", ""])
     for k, v in EXTRA.items()] + [
     ["Готовность партнёров дать дополнительно — активный", "млн USD за квартал, максимум", ""] +
     [f"=CHOOSE(MATCH($C$3;$A$8:$A$10;0);{c}{XF};{c}{XF + 1};{c}{XF + 2})" for c in "DEFGHIJKLM"] + ["", ""]]
@@ -123,7 +132,8 @@ rows = [
     ["TRADE_BAL", "Сальдо торговли", "экспорт − импорт"] + [f"={c}24-{c}26" for c in "DEFG"],
     ["REMIT", "Частные переводы (оплата труда + трансферты)", "сумма кварталов (раздел 5)", round(float(rem_y["2025"]))]
     + [f"=SUM({q4(c, 'REMQ')})" for c in "EFG"] + ["лист Dollar (НБУ); до 2026-10-26 здесь были только трансферты"],
-    ["FDI", "Прямые инвестиции (чистые обязательства)", "на уровне 2025", round(float(a["FDI_L_USD"]))] + EFG(lambda c, p: f"={p}29"),
+    ["FDI", "Прямые инвестиции (чистые обязательства)", "2026 — сумма кварталов (факт + остаток); дальше на уровне 2026", round(float(a["FDI_L_USD"])),
+     f"=SUM({q4('E', 'FDIQ')})", "=E29", "=F29"],
     ["OTHER", "Прочие потоки", "сумма кварталов: средний остаток 2022–2025 / 4", round(other_2025)]
     + [f"=SUM({q4(c, 'OTHERQ')})" for c in "EFG"] + ["доходы, погашения долга, частный отток; 2026 3 кв.: транш — остаток по факту резервов"],
     ["FIN_NEED", "Потребность во внешнем финансировании", "−(сальдо + переводы + ПИИ + прочие)"] + [f"=-({c}27+{c}28+{c}29+{c}30)" for c in "DEFG"],
@@ -172,11 +182,15 @@ EUR_SC = SL.EURUSD  # SCENARIOS: EUR/USD by scenario, active columns L:N
 R = QROW
 year = lambda i: QS[i][:4]
 pc = lambda i, k=1: QC[i - k]
-FACT_TRADE, FACT_FX = 5, 6  # last quarter with facts: remittances, FDI, financing 2026Q2; rate and reserves 2026Q3
+FACT_TRADE, FACT_FX = 5, 6  # last quarter with facts: national accounts 2026Q2; rate and reserves 2026Q3
+# remittances, FDI and financing received: monthly NBU files (Perekaz_m, BOP_m) run a quarter ahead of the API
+bop_m = pd.read_csv(EXT / "bop_fin_m.csv", index_col="month")
+bop_q = bop_m.drop(columns="source").groupby(pd.PeriodIndex(bop_m.index, freq="M").asfreq("Q").strftime("%YQ%q")).sum(min_count=3)
+FACT_BOP = max(i for i, q in enumerate(QS) if q in bop_q.index and bop_q.loc[q].notna().all())
+FACT_REM = max(i for i, q in enumerate(QS) if q in dq.index and pd.notna(dq.loc[q, "REM_TOT"]))
+fdi_fact = lambda i: round(float(bop_q.loc[QS[i], "FDI_L"])) if i > FACT_TRADE else round(float(hq.loc[QS[i], "FDI_L_USD"]))
 # exports and imports: the last quarter with all three months in the history (BOP_m file runs ahead of the API)
 FACT_EXPIMP = max(i for i, ok in enumerate(hq.reindex(QS)[["EXP_USD", "IMP_USD"]].notna().all(axis=1)) if ok)
-rem_part = dq.loc["2026Q3"]
-rem_q3 = round(float(rem_part["REM_TOT_PART"]) * 3 / int(rem_part["REM_MONTHS"]))
 rem_g = dq["REM_TOT"] / dq["REM_TOT"].shift(4) * 100 - 100
 hist_g = rem_g.loc["2019Q1":"2026Q2"].dropna()
 off_sh = float(dq.loc["2025Q3":"2026Q2", "REM_OFF"].sum() / dq.loc["2025Q3":"2026Q2", "REM_TOT"].sum())
@@ -262,22 +276,23 @@ put("REMQ_G", line("REMQ_G", "Рост частных переводов", f"% �
                    f"-{mig(pc(i, 3), c)}"),
                    f"R² {nm(fit['r2'])}; миграция — B4_LABOUR строка 14 (+ = возврат)"))
 put("REMQ", line("REMQ", "Частные переводы в Украину", "оплата труда + трансферты; прошлый год × (1 + рост)",
-                 lambda i, c: round(float(dq.loc[QS[i], "REM_TOT"])) if i <= FACT_TRADE else (rem_q3 if i == 6 else
-                 f"={pc(i, 4)}{R['REMQ']}*(1+{c}{R['REMQ_G']}/100)"),
-                 f"лист Dollar; 2026Q3 — {int(rem_part['REM_MONTHS'])} месяца факта × 3 / {int(rem_part['REM_MONTHS'])}"))
+                 lambda i, c: round(float(dq.loc[QS[i], "REM_TOT"])) if i <= FACT_REM else
+                 f"={pc(i, 4)}{R['REMQ']}*(1+{c}{R['REMQ_G']}/100)",
+                 f"факт НБУ Perekaz_m по {QS[FACT_REM]} (лист Dollar до 2026-08)"))
 put("REMQ_OFF", line("REMQ_OFF", "  через официальные каналы", f"доля 2025Q3–2026Q2: {nm(off_sh * 100, 1)}%",
-                     lambda i, c: round(float(dq.loc[QS[i], "REM_OFF"])) if i <= FACT_TRADE else f"={c}{R['REMQ']}*{nm(off_sh, 3).replace('−', '-')}",
+                     lambda i, c: round(float(dq.loc[QS[i], "REM_OFF"])) if i <= FACT_REM else f"={c}{R['REMQ']}*{nm(off_sh, 3).replace('−', '-')}",
                      "банки и платёжные системы"))
 put("REMQ_INF", line("REMQ_INF", "  через неформальные каналы", "переводы − официальные",
-                     lambda i, c: round(float(dq.loc[QS[i], "REM_INF"])) if i <= FACT_TRADE else f"={c}{R['REMQ']}-{c}{R['REMQ_OFF']}",
+                     lambda i, c: round(float(dq.loc[QS[i], "REM_INF"])) if i <= FACT_REM else f"={c}{R['REMQ']}-{c}{R['REMQ_OFF']}",
                      "оценка НБУ (наличные через границу и т. п.)"))
-put("FDIQ", line("FDIQ", "Прямые инвестиции (чистые обязательства)", "год (раздел 2) / 4; 2026 — остаток после 1 полугодия",
-                 lambda i, c: round(float(hq.loc[QS[i], "FDI_L_USD"])) if i <= FACT_TRADE else
-                 ("=($E$29-SUM($H${0}:$I${0}))/2".format(R["FDIQ"]) if year(i) == "2026" else f"={YC[year(i)]}$29/4")))
+put("FDIQ", line("FDIQ", "Прямые инвестиции (чистые обязательства)", "факт НБУ BOP_m; остаток 2026 — среднее фактических кварталов года; дальше год (раздел 2) / 4",
+                 lambda i, c: fdi_fact(i) if i <= FACT_BOP else
+                 (f"=AVERAGE($H${R['FDIQ']}:{pc(i)}{R['FDIQ']})" if year(i) == "2026" else f"={YC[year(i)]}$29/4")))
 put("OTHERQ", line("OTHERQ", "Прочие потоки", f"COEFS BOP_OTHER / 4 ({nm(-9000 / 4, 0)}); факт — остаток по изменению резервов",
                    lambda i, c: other_hist[QS[i]] if i <= FACT_TRADE else
-                   f"={C('BOP','OTHER')}/4",
-                   "2026Q3: резервы известны, потоки ещё нет — неизвестным считается транш (ANCHORS строка 29)"))
+                   (f"=({c}{R['RESQ']}-{pc(i)}{R['RESQ']}-{c}{R['RES_REVAL']})-{c}{R['TBQ']}-{c}{R['REMQ']}-{c}{R['FDIQ']}-{c}{R['FINQ']}"
+                    if i <= min(FACT_BOP, FACT_FX) else f"={C('BOP','OTHER')}/4"),
+                   "факт: остаток по изменению резервов (все потоки и резервы известны)"))
 put("FINQ", line("FINQ", "Получено внешнего финансирования", f"ANCHORS строка 29 (транши SCENARIOS строки {SL.FIN_Q}–{SL.FIN_Q + 6})",
                  lambda i, c: f"=ANCHORS!{AC[QS[i]]}29"))
 put("NEEDQ", line("NEEDQ", "Потребность во внешнем финансировании", "−(сальдо + переводы + ПИИ + прочие)",
