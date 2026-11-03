@@ -23,7 +23,7 @@ SC_YEAR = {"2026": "L", "2027": "M", "2028": "N"}  # SCENARIOS active annual col
 PRESS_2026Q3 = {"CORE": 8.8, "RAW": 6.7, "ADM": 13.6, "FUEL": 46.2}  # NBU, September 2026 y/y
 BRENT_2025 = [75.8, 68.0, 69.0, 63.6]
 from sheet.scenarios_quarterly_payload import ROW as QROW  # main quarterly block of SCENARIOS (D:M = 2026Q3..2028Q4)
-BRENT_Q = QROW["BRENT"] + 3  # active-scenario Brent row; the annual Brent block was removed 2026-10-29 (one value, one row)
+BRENT_Y = SL.BRENT  # Brent: one value a year in the annual table, active columns L:N (quarterly rows removed 2026-11-03)
 MAIN_Q = {c: s for c, s in zip(COLS[2:], "DEFGHIJKLM")}
 
 # section 6: fuel input q/q (SCENARIOS, one row) -> y/y of the fuel block (row 45); moved here from SCENARIOS 2026-10-29
@@ -87,8 +87,8 @@ rows = [
     + [f"=(ANCHORS!{a}20/ANCHORS!{b}20-1)*100" for a, b in zip(ANCH, ANCH4)] + ["из ANCHORS, строка 20 (B4)"],
     ["BRENT", "Нефть Brent", "USD/барр., средняя за квартал"]
     + [round(float(x_), 1) for x_ in B.Q.long_quarterly()["PX_BRENT_USD"].loc["2026Q1":"2026Q3"]]
-    + [f"=SCENARIOS!{MAIN_Q[c]}{BRENT_Q}" for c in fc]
-    + [f"факт EIA; прогноз — SCENARIOS строка {BRENT_Q} (активный сценарий, по кварталам)"],
+    + [f"=INDEX(SCENARIOS!$L${BRENT_Y}:$N${BRENT_Y};{int(QUARTERS[COLS.index(c)][:4]) - 2025})" for c in fc]
+    + [f"факт EIA; прогноз — SCENARIOS строка {BRENT_Y}, активный сценарий: среднее года во всех кварталах года"],
     ["BRENT_G", "Рост цены нефти", "% г/г"]
     + [f"=({c}42/{b}-1)*100".replace(",", ".").replace(".", ",") for c, b in zip(COLS[:4], BRENT_2025)]
     + [f"=({c}42/{COLS[COLS.index(c) - 4]}42-1)*100" for c in COLS[4:]],

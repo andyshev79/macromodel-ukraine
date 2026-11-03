@@ -235,15 +235,17 @@ def test_agro_block():
 
 
 def test_scenario_logic():
-    t = payload("scenario_logic_payload")[f"SCENARIOS!A{SL.LIMITS}:F{SL.LIMITS + 45}"]
+    p = payload("scenario_logic_payload")
+    t = p[f"{SL.CHECKS_SHEET}!A1:F46"]  # limits + checks moved off SCENARIOS on 2026-11-03
     lim = {r[0]: r[3] for r in t[3:13]}
     assert lim["LIM_PORTS"] == 160 and lim["LIM_CAP"] == 24 and lim["FACT_PORTS"] == 84.8
     chk = [r for r in t[16:44]]
-    assert t[14][3] == f'=COUNTIF(D{SL.LIMITS + 16}:F{SL.LIMITS + 43};"ВНИМАНИЕ*")' and chk[0][0] == "L_PORTS" and chk[-1][0] == f"O_{SL.AREA}"
+    assert p[f"SCENARIOS!A{SL.LIMITS}:D{SL.LIMITS}"][0][3] == f"={SL.CHECKS_SHEET}!D15"  # one summary line left
+    assert t[14][3] == '=COUNTIF(D17:F44;"ВНИМАНИЕ*")' and chk[0][0] == "L_PORTS" and chk[-1][0] == f"O_{SL.AREA}"
     assert not any("STRIKES" in r[0] for r in chk)  # energy strikes removed 2026-10-29
     assert all(str(f).startswith("=") for r in chk for f in r[3:4])
-    assert f"C{SL.LAB['MILN']}:L{SL.LAB['MILN']}" in next(r for r in chk if r[0] == "L_MIL")[3]  # military headcount rows
-    assert f"C{SL.PEACE_C}:E{SL.PEACE_C}" in next(r for r in chk if r[0] == "C_PEACE")[3]  # peace effect rows
+    assert f"SCENARIOS!C{SL.LAB['MILN']}:L{SL.LAB['MILN']}" in next(r for r in chk if r[0] == "L_MIL")[3]  # military headcount rows
+    assert f"SCENARIOS!C{SL.PEACE_C}:E{SL.PEACE_C}" in next(r for r in chk if r[0] == "C_PEACE")[3]  # peace effect rows
 
 
 def test_other_split():
