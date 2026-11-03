@@ -370,30 +370,30 @@ def test_deficit_2026_by_treasury_months():
 
 
 def test_fuel_input_is_quarter_on_quarter():
-    """Andrey, 29.10: fuel is entered as q/q in one SCENARIOS row; B3_PRICES section 6 chains it into the y/y of row 45."""
+    """Andrey, 29.10: fuel is entered as q/q in one SCENARIOS row; B3_PRICES section 6 chains it into the y/y of row 37."""
     f = payload("shocks_payload")[f"SCENARIOS!A{SL.FUEL_HEAD}:L{SL.FUEL_QQ + 1}"]
     q = SL.FUEL_QQ
     assert f[1][2] == 13.6 and len(f) == 3 and SL.LABOUR == SL.FUEL_QQ + 3  # head, input, note; no helper rows
-    b3 = payload("cpi_blocks_payload")["B3_PRICES!A37:P75"]
-    sec = {r[0]: r for r in b3[27:31]}  # section 6 = rows 64-67
+    b3 = payload("cpi_blocks_payload")["B3_PRICES!A29:P67"]
+    sec = {r[0]: r for r in b3[27:31]}  # section 6 = rows 56-59
     assert sec["FUEL_IN"][6] == f'=IF(SCENARIOS!D{q}="";"";SCENARIOS!D{q})'
-    assert sec["FUEL_LAG"][5:8] == [3.7, 1.6, "=D67"] and sec["FUEL_QQ"][3:5] == [18.6, 6.8]
-    assert sec["FUEL_YY"][6] == '=IF(G64="";"";(1+F45/100)*(1+G64/100)/(1+G65/100)*100-100)'
-    assert b3[8][6].startswith('=IF(G66<>"";G66;')  # 2026Q4 of the fuel block (column G)
+    assert sec["FUEL_LAG"][5:8] == [3.7, 1.6, "=D59"] and sec["FUEL_QQ"][3:5] == [18.6, 6.8]
+    assert sec["FUEL_YY"][6] == '=IF(G56="";"";(1+F37/100)*(1+G56/100)/(1+G57/100)*100-100)'
+    assert b3[8][6].startswith('=IF(G58<>"";G58;')  # 2026Q4 of the fuel block (column G)
 
 
 
 def test_tariffs_only_after_martial_law():
     """Andrey, 30.10: utility tariffs rise only after martial law is lifted (the quarter after the ceasefire)."""
-    b3 = payload("cpi_blocks_payload")["B3_PRICES!A37:P75"]
+    b3 = payload("cpi_blocks_payload")["B3_PRICES!A29:P67"]
     end, tin, cap, back, eff = b3[-5:]
     assert end[0] == "ML_END" and "SCENARIOS!$L$16:$N$16" in end[3]
     assert tin[5] == f"=N(SCENARIOS!C{SL.TARIFF})"
     # Andrey, 30.10: after martial law the backlog rises gradually, at most 25% a year in quarterly steps
     assert cap[0] == "TARIFF_MAX" and cap[3] == 25
-    assert back[0] == "TARIFF_BACK" and back[5] == "=E74-E75+F72"
-    assert eff[0] == "TARIFF_EFF" and eff[5].endswith("MIN(F74;$D$73/4))")
-    assert b3[11][0] == "ADM_T" and b3[11][5].endswith("SUM(D75:F75)")
+    assert back[0] == "TARIFF_BACK" and back[5] == "=E66-E67+F64"
+    assert eff[0] == "TARIFF_EFF" and eff[5].endswith("MIN(F66;$D$65/4))")
+    assert b3[11][0] == "ADM_T" and b3[11][5].endswith("SUM(D67:F67)")
 
 
 def test_q3_trade_fact_from_bop_file():

@@ -1,4 +1,4 @@
-"""Build the quarterly CPI-by-blocks section of B3_PRICES (rows 38-59), its COEFS rows, the Brent
+"""Build the quarterly CPI-by-blocks section of B3_PRICES (rows 30-51), its COEFS rows, the Brent
 row in SCENARIOS and the ANCHORS CPI link (macromodel.blocks.cpi_blocks).
 
 Quarter columns D:O of B3 are 2026Q1..2028Q4 (ANCHORS AZ:BK). 2026Q1-Q2 are facts from the
@@ -27,11 +27,11 @@ BRENT_Y = SL.BRENT  # Brent: one value a year in the annual table, active column
 MAIN_Q = {c: s for c, s in zip(COLS[2:], "DEFGHIJKLM")}
 
 # section 6: fuel input q/q (SCENARIOS, one row) -> y/y of the fuel block (row 45); moved here from SCENARIOS 2026-10-29
-FU = {"HEAD": 62, "IN": 64, "LAG": 65, "YY": 66, "QQ": 67}
+FU = {"HEAD": 54, "IN": 56, "LAG": 57, "YY": 58, "QQ": 59}
 # section 7: tariffs rise only after martial law is lifted (rule of 2026-10-30): hikes entered for earlier quarters
 # are deferred to the first quarter without martial law; martial law is assumed lifted the quarter after the ceasefire.
 # From then on the backlog rises gradually, at most TARIFF_MAX % a year in equal quarterly steps (Andrey, 30.10)
-TA = {"HEAD": 69, "END": 71, "IN": 72, "MAX": 73, "BACK": 74, "EFF": 75}
+TA = {"HEAD": 61, "END": 63, "IN": 64, "MAX": 65, "BACK": 66, "EFF": 67}
 TARIFF_MAX = 25  # % a year: middle of the 20-30% a year NBU-style path; NBU admin prices 11-14% y/y in 2026-2028
 CEASE = "IFERROR(INDEX(SCENARIOS!$L$16:$N$16;MATCH(\"2*\";SCENARIOS!$L$16:$N$16;0));\"нет\")"
 
@@ -79,7 +79,7 @@ def tariffs(c):
 
 rows = [
     [""],
-    ["4. ИПЦ по блокам НБУ: кварталы, % г/г на конец квартала. Итог (строка 52) идёт в ANCHORS, строка 10"],
+    ["4. ИПЦ по блокам НБУ: кварталы, % г/г на конец квартала. Итог (строка 44) идёт в ANCHORS, строка 10"],
     ["Код", "Показатель", "Уравнение"] + QUARTERS + ["Комментарий"],
     ["FX_Q", "Девальвация гривны", "средний курс к тому же кварталу прошлого года"]
     + [f"=(ANCHORS!{a}12/ANCHORS!{b}12-1)*100" for a, b in zip(ANCH, ANCH4)] + ["из ANCHORS, строка 12"],
@@ -90,66 +90,66 @@ rows = [
     + [f"=INDEX(SCENARIOS!$L${BRENT_Y}:$N${BRENT_Y};{int(QUARTERS[COLS.index(c)][:4]) - 2025})" for c in fc]
     + [f"факт EIA; прогноз — SCENARIOS строка {BRENT_Y}, активный сценарий: среднее года во всех кварталах года"],
     ["BRENT_G", "Рост цены нефти", "% г/г"]
-    + [f"=({c}42/{b}-1)*100".replace(",", ".").replace(".", ",") for c, b in zip(COLS[:4], BRENT_2025)]
-    + [f"=({c}42/{COLS[COLS.index(c) - 4]}42-1)*100" for c in COLS[4:]],
+    + [f"=({c}34/{b}-1)*100".replace(",", ".").replace(".", ",") for c, b in zip(COLS[:4], BRENT_2025)]
+    + [f"=({c}34/{COLS[COLS.index(c) - 4]}34-1)*100" for c in COLS[4:]],
     ["HARV", "Рост урожая зерновых и масличных", "урожай года действует с 3 кв. по 2 кв. следующего"]
     + [harv(c) for c in COLS] + ["B10_AGRO строка 26 (урожай шести культур)"],
     ["FUEL", B.NAMES["FUEL"], f"{kv('FUEL', 'const')} + {kv('FUEL', 'BRENT')} × нефть + {kv('FUEL', 'FX')} × девальвация"]
     + [fact("FUEL", i) for i in range(FACT)]
     + [f"=IF({c}{FU['YY']}<>\"\";{c}{FU['YY']};"
-       f"{C('FUEL', 'const')}+{C('FUEL', 'BRENT')}*{c}43+{C('FUEL', 'FX')}*{c}40)" for c in fc]
+       f"{C('FUEL', 'const')}+{C('FUEL', 'BRENT')}*{c}35+{C('FUEL', 'FX')}*{c}32)" for c in fc]
     + [f"задано в SCENARIOS (ввод кв/кв строка {SL.FUEL_QQ}, г/г — строка {FU['YY']}) — берётся оно, иначе уравнение"],
     ["RAW", B.NAMES["RAW"], f"{kv('RAW', 'const')} + {kv('RAW', 'RAW_L1')} × прошлый квартал + {kv('RAW', 'FUEL_L1')} × топливо прошлого квартала "
                             f"{kv('RAW', 'HARV')} × рост урожая"]
     + [fact("RAW", i) for i in range(FACT)]
-    + [f"={C('RAW', 'const')}+{C('RAW', 'RAW_L1')}*{prev(c)}46+{C('RAW', 'FUEL_L1')}*{prev(c)}45+{C('RAW', 'HARV')}*{c}44" for c in fc]
+    + [f"={C('RAW', 'const')}+{C('RAW', 'RAW_L1')}*{prev(c)}38+{C('RAW', 'FUEL_L1')}*{prev(c)}37+{C('RAW', 'HARV')}*{c}36" for c in fc]
     + ["овощи, фрукты, мясо, яйца, молоко"],
     ["ADM_X", "Админцены без тарифов ЖКУ", f"{kv('ADM', 'const')} + {kv('ADM', 'ADM_L1')} × прошлый квартал"]
     + [fact("ADM", i) for i in range(FACT)]
-    + [f"={C('ADM', 'const')}+{C('ADM', 'ADM_L1')}*{prev(c)}47" for c in fc] + ["акцизы на табак и алкоголь, проезд, связь"],
+    + [f"={C('ADM', 'const')}+{C('ADM', 'ADM_L1')}*{prev(c)}39" for c in fc] + ["акцизы на табак и алкоголь, проезд, связь"],
     ["ADM_T", "Вклад повышения тарифов ЖКУ", "доля ЖКУ в админценах × повышения за 4 квартала", 0, 0]
     + [f"={C('ADM', 'TARIFF')}*{tariffs(c)}" for c in COLS[2:]]
     + [f"SCENARIOS строка {TARIFF_ROW}, только после отмены военного положения (строка {TA['EFF']})"],
-    ["ADM", B.NAMES["ADM"], "строка 47 + строка 48"] + [fact("ADM", i) for i in range(FACT)]
-    + [f"={c}47+{c}48" for c in fc],
+    ["ADM", B.NAMES["ADM"], "строка 39 + строка 40"] + [fact("ADM", i) for i in range(FACT)]
+    + [f"={c}39+{c}40" for c in fc],
     ["CORE", B.NAMES["CORE"], f"{kv('CORE', 'const')} + {kv('CORE', 'FX')} × девальвация + {kv('CORE', 'WAGE')} × зарплата "
                               f"+ {kv('CORE', 'CORE_L1')} × прошлый квартал"]
     + [fact("CORE", i) for i in range(FACT)]
-    + [f"={C('CORE', 'const')}+{C('CORE', 'FX')}*{c}40+{C('CORE', 'WAGE')}*{c}41+{C('CORE', 'CORE_L1')}*{prev(c)}50" for c in fc]
+    + [f"={C('CORE', 'const')}+{C('CORE', 'FX')}*{c}32+{C('CORE', 'WAGE')}*{c}33+{C('CORE', 'CORE_L1')}*{prev(c)}42" for c in fc]
     + ["обработанные продукты, непродовольственные товары, услуги"],
     ["CPI_B", "ИПЦ из блоков", f"{kv('W', 'const')} + {kv('W', 'CORE')}×базовая + {kv('W', 'RAW')}×сырые + {kv('W', 'ADM')}×админ "
                               f"+ {kv('W', 'FUEL')}×топливо + влияние ставки (B7)"]
-    + [f"={C('W', 'const')}+{C('W', 'CORE')}*{c}50+{C('W', 'RAW')}*{c}46+{C('W', 'ADM')}*{c}49+{C('W', 'FUEL')}*{c}45"
+    + [f"={C('W', 'const')}+{C('W', 'CORE')}*{c}42+{C('W', 'RAW')}*{c}38+{C('W', 'ADM')}*{c}41+{C('W', 'FUEL')}*{c}37"
        + ("" if c in COLS[:FACT] else f"+B7_MONETARY!${YEAR_COL[year(c)]}$42") for c in COLS]
     + ["2026Q1–Q3: проверка весов на факте"],
-    ["CPI_Q", "ИПЦ в модели", f"факт; задано в SCENARIOS строка {SL.CPI_Q}; иначе строка 51 этого листа", "=ANCHORS!AZ10", "=ANCHORS!BA10"]
-    + [f"=IF(SCENARIOS!{SCQ[c]}{SL.CPI_Q}<>\"\";SCENARIOS!{SCQ[c]}{SL.CPI_Q};{c}51)" for c in COLS[2:]] + ["идёт в ANCHORS, строка 10"],
+    ["CPI_Q", "ИПЦ в модели", f"факт; задано в SCENARIOS строка {SL.CPI_Q}; иначе строка 43 этого листа", "=ANCHORS!AZ10", "=ANCHORS!BA10"]
+    + [f"=IF(SCENARIOS!{SCQ[c]}{SL.CPI_Q}<>\"\";SCENARIOS!{SCQ[c]}{SL.CPI_Q};{c}43)" for c in COLS[2:]] + ["идёт в ANCHORS, строка 10"],
     [""],
     ["5. Вклады блоков в ИПЦ, п.п."],
     ["Код", "Блок", ""] + QUARTERS,
 ] + [[f"CPI_{k}", B.NAMES[k], f"вес × блок (строка {r})"] + [f"={C('W', k)}*{c}{r}" for c in COLS]
-     for k, r in [("CORE", 50), ("RAW", 46), ("ADM", 49), ("FUEL", 45)]] + [
-    ["CPI_OTHER", "Константа и ставка НБУ", ""] + [f"={c}51-SUM({c}56:{c}59)" for c in COLS],
+     for k, r in [("CORE", 42), ("RAW", 38), ("ADM", 41), ("FUEL", 37)]] + [
+    ["CPI_OTHER", "Константа и ставка НБУ", ""] + [f"={c}43-SUM({c}48:{c}51)" for c in COLS],
 ]
 pc = lambda c: COLS[COLS.index(c) - 1]
 fuel_rows = [
-    ["6. Топливо: ввод SCENARIOS (кв/кв) → г/г для блока «топливо» (строка 45)"],
+    ["6. Топливо: ввод SCENARIOS (кв/кв) → г/г для блока «топливо» (строка 37)"],
     ["Код", "Показатель", "Как считается"] + QUARTERS + ["Комментарий"],
     ["FUEL_IN", "Ввод: прирост цен топлива к прошлому кварталу", f"SCENARIOS строка {SL.FUEL_QQ}, % кв/кв", "", ""]
     + [f"=IF(SCENARIOS!{SCQ[c]}{SL.FUEL_QQ}=\"\";\"\";SCENARIOS!{SCQ[c]}{SL.FUEL_QQ})" for c in COLS[2:]]
-    + ["пусто — ввода нет, работает уравнение строки 45"],
+    + ["пусто — ввода нет, работает уравнение строки 37"],
     ["FUEL_LAG", "Тот же квартал год назад, кв/кв", "сезонность: кв/кв четыре квартала назад", "", "",
      FUEL_QOQ["2025Q3"], FUEL_QOQ["2025Q4"]] + [f"={COLS[COLS.index(c) - 4]}{FU['QQ']}" for c in COLS[4:]]
     + ["2025Q3–Q4 — MacroStat, ИПЦ «топливо и масла»"],
     ["FUEL_YY", "Топливо из ввода, г/г", "(1 + г/г прошлого квартала) × (1 + ввод) / (1 + кв/кв год назад) − 1", "", ""]
-    + [f"=IF({c}{FU['IN']}=\"\";\"\";(1+{pc(c)}45/100)*(1+{c}{FU['IN']}/100)/(1+{c}{FU['LAG']}/100)*100-100)" for c in COLS[2:]]
-    + ["идёт в строку 45 (2026Q3 — проверка: факт НБУ 46,2)"],
-    ["FUEL_QQ", "Топливо: итог кв/кв (ввод или уравнение)", "ввод, иначе из г/г строки 45", FUEL_QOQ["2026Q1"], FUEL_QOQ["2026Q2"]]
-    + [f"=IF({c}{FU['IN']}<>\"\";{c}{FU['IN']};(1+{c}45/100)/(1+{pc(c)}45/100)*(1+{c}{FU['LAG']}/100)*100-100)" for c in COLS[2:]]
+    + [f"=IF({c}{FU['IN']}=\"\";\"\";(1+{pc(c)}37/100)*(1+{c}{FU['IN']}/100)/(1+{c}{FU['LAG']}/100)*100-100)" for c in COLS[2:]]
+    + ["идёт в строку 37 (2026Q3 — проверка: факт НБУ 46,2)"],
+    ["FUEL_QQ", "Топливо: итог кв/кв (ввод или уравнение)", "ввод, иначе из г/г строки 37", FUEL_QOQ["2026Q1"], FUEL_QOQ["2026Q2"]]
+    + [f"=IF({c}{FU['IN']}<>\"\";{c}{FU['IN']};(1+{c}37/100)/(1+{pc(c)}37/100)*(1+{c}{FU['LAG']}/100)*100-100)" for c in COLS[2:]]
     + ["показывает, какой кв/кв даёт уравнение"],
 ]
 rows += [[""]] + fuel_rows
-assert 37 + len(rows) - 1 == FU["QQ"]
+assert 29 + len(rows) - 1 == FU["QQ"]
 tariff_rows = [
     ["7. Тарифы ЖКУ: повышение только после отмены военного положения"],
     ["Код", "Показатель", "Как считается"] + QUARTERS + ["Комментарий"],
@@ -164,13 +164,13 @@ tariff_rows = [
     + [f"={COLS[i - 1]}{TA['BACK']}-{COLS[i - 1]}{TA['EFF']}+{c}{TA['IN']}" for i, c in enumerate(COLS) if i]
     + ["повышения, введённые на время военного положения, ждут здесь"],
     ["TARIFF_EFF", "Повышение тарифов с учётом военного положения", "0 до отмены; потом накопленное, но не больше предела / 4 за квартал"]
-    + [f"=IF(OR($D${TA['END']}=\"нет\";{c}$39<$D${TA['END']});0;MIN({c}{TA['BACK']};$D${TA['MAX']}/4))" for c in COLS]
-    + ["идёт в строку 48 (ADM_T)"],
+    + [f"=IF(OR($D${TA['END']}=\"нет\";{c}$31<$D${TA['END']});0;MIN({c}{TA['BACK']};$D${TA['MAX']}/4))" for c in COLS]
+    + ["идёт в строку 40 (ADM_T)"],
 ]
 rows += [[""]] + tariff_rows
-assert 37 + len(rows) - 1 == TA["EFF"]
-out[f"B3_PRICES!A37:P{37 + len(rows) - 1}"] = rows  # through section 7
-out["ANCHORS!BB10"] = [["=INDEX(B3_PRICES!$D$52:$O$52;MATCH(BB$4;B3_PRICES!$D$39:$O$39;0))"]]
+assert 29 + len(rows) - 1 == TA["EFF"]
+out[f"B3_PRICES!A29:P{29 + len(rows) - 1}"] = rows  # through section 7
+out["ANCHORS!BB10"] = [["=INDEX(B3_PRICES!$D$44:$O$44;MATCH(BB$4;B3_PRICES!$D$31:$O$31;0))"]]
 if "--coefs" in sys.argv:
     out = {k: v for k, v in out.items() if k.startswith("COEFS")}
 from sheet.scenarios_quarterly_payload import protect  # annual SCENARIOS cells are formulas over the quarters
