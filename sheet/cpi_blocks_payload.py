@@ -120,7 +120,7 @@ rows = [
     ["CPI_B", "ИПЦ из блоков", f"{kv('W', 'const')} + {kv('W', 'CORE')}×базовая + {kv('W', 'RAW')}×сырые + {kv('W', 'ADM')}×админ "
                               f"+ {kv('W', 'FUEL')}×топливо + влияние ставки (B7)"]
     + [f"={C('W', 'const')}+{C('W', 'CORE')}*{c}50+{C('W', 'RAW')}*{c}46+{C('W', 'ADM')}*{c}49+{C('W', 'FUEL')}*{c}45"
-       + ("" if c in COLS[:FACT] else f"+${YEAR_COL[year(c)]}$34") for c in COLS]
+       + ("" if c in COLS[:FACT] else f"+B7_MONETARY!${YEAR_COL[year(c)]}$42") for c in COLS]
     + ["2026Q1–Q3: проверка весов на факте"],
     ["CPI_Q", "ИПЦ в модели", f"факт; задано в SCENARIOS строка {SL.CPI_Q}; иначе строка 51 этого листа", "=ANCHORS!AZ10", "=ANCHORS!BA10"]
     + [f"=IF(SCENARIOS!{SCQ[c]}{SL.CPI_Q}<>\"\";SCENARIOS!{SCQ[c]}{SL.CPI_Q};{c}51)" for c in COLS[2:]] + ["идёт в ANCHORS, строка 10"],

@@ -66,7 +66,7 @@ top = [
     ["Берёт", "B2_DEMAND (реальная зарплата), SCENARIOS (газ TTF, инфляция еврозоны), ANCHORS (курс, реальный ВВП), COEFS"],
     ["Пишет в ANCHORS", "CPI_YOY, PPI_YOY, GDP_NOM"],
     ["Статус", "в работе: версия 1"],
-    ["Как читать", "Модель даёт рост за год. В ANCHORS им заполняются кварталы без факта; строка «с учётом факта» — среднее за год по ANCHORS."],
+    ["Как читать", "ИПЦ считается по кварталам (раздел 4). ИЦП и дефлятор — рост за год: он ставится во все прогнозные кварталы года; строка «с учётом факта» — среднее за год по ANCHORS вместе с фактом."],
     [""],
     ["1. Драйверы"],
     ["Код", "Показатель", "Единицы", 2025, 2026, 2027, 2028, "Как считается"],
@@ -79,12 +79,14 @@ top = [
     ["TTF_G", "Рост цены газа TTF", "%", round(float(a["TTF"]), 1), "=(E13/D13-1)*100", "=(F13/E13-1)*100", "=(G13/F13-1)*100", "из строки выше"],
     ["HICP", "Инфляция еврозоны", "%", float(a["HICP"]), *[f"=SCENARIOS!{s}{SL.Y['HICP']}" for s in "LMN"], "из SCENARIOS"],
     [""],
-    ["2. Цены, средний рост за год, %"],
+    ["2. Цены за год, % (ИПЦ декабрь к декабрю и средний; ИЦП и дефлятор — средний рост)"],
     ["Код", "Показатель", "Уравнение", 2025, 2026, 2027, 2028, "Комментарий"],
-    ["CPI_M", "ИПЦ, модель", f"{k('CPI','const')} + {k('CPI','WAGE')} × рост зарплаты + {k('CPI','FX')} × девальвация + {kb} × девальвация сверх {quarterly.FX_THR}% + влияние ставки (B7)", round(float(a["CPI"]), 1)]
-    + [f"={C('CPI','const')}+{C('CPI','FX')}*{c}11+{FXB.format(c=c)}+{C('CPI','WAGE')}*{c}12+B7_MONETARY!{c}42" for c in "EFG"]
-    + [f"Оценка по кварталам 2011–2025 (R² {qc['r2']:.2f}, без 2022Q1–2023Q1); качество — лист MODEL_QUALITY".replace(".", ",")],
-    ["CPI_YOY", "ИПЦ с учётом факта", "среднее кварталов ANCHORS"] + [f"={avg(c, 10)}" for c in "DEFG"],
+    # 2026-11-03, Andrey: the old annual CPI equation was unused (CPI comes from the quarterly blocks, section 4); this row
+    # shows the December y/y instead, the measure SUMMARY and ANNUAL use for the year
+    ["CPI_DEC", "ИПЦ, декабрь к декабрю", "4 кв. ANCHORS строка 10 (г/г на конец года)"]
+    + [f"=ANCHORS!{col(10 + 4 * (YEAR[c] - 2015))}10" for c in "DEFG"] + ["так год показан в SUMMARY и ANNUAL"],
+    ["CPI_YOY", "ИПЦ, среднее за год", "среднее четырёх кварталов ANCHORS (г/г на конец квартала)"] + [f"={avg(c, 10)}" for c in "DEFG"]
+    + ["кварталы — раздел 4, ИПЦ по блокам НБУ"],
     ["PPI_M", "ИЦП, модель", f"{k('PPI','CPI')} × ИПЦ + {k('PPI','TTF')} × рост цены газа", round(float(a["PPI"]), 1)]
     + [f"={C('PPI','const')}+{C('PPI','CPI')}*{c}20+{C('PPI','TTF')}*{c}14" for c in "EFG"] + ["R² 0,89"],
     ["PPI_YOY", "ИЦП с учётом факта", "среднее кварталов ANCHORS"] + [f"={avg(c, 11)}" for c in "DEFG"],
@@ -96,20 +98,14 @@ top = [
     ["GDP_NOM", "Номинальный ВВП", "млрд грн"] + [f"={sm(c, 8)}/1000" for c in "DEFG"],
     ["CPI_GAP", "ИПЦ − цель НБУ (5%)", "п.п., проверка на листе CHECKS"] + [f"={c}20-5" for c in "DEFG"],
     [""],
-    ["3. Вклады в ИПЦ по модели, п.п."],
-    ["Код", "Фактор", "", 2025, 2026, 2027, 2028],
-    ["CPI_WAGE", "Зарплаты", "", ""] + [f"={C('CPI','WAGE')}*{c}12" for c in "EFG"],
-    ["CPI_FX", "Курс", "", ""] + [f"={C('CPI','FX')}*{c}11+{FXB.format(c=c)}" for c in "EFG"],
-    ["CPI_CONST", "Константа", "", ""] + [f"={C('CPI','const')}" for c in "EFG"],
-    ["CPI_RATE", "Ставка НБУ прошлого года", "", ""] + [f"=B7_MONETARY!{c}42" for c in "EFG"],
-    ["CPI_M", "ИПЦ, модель", "", ""] + [f"=SUM({c}31:{c}34)" for c in "EFG"],
+    ["3. Вклады в ИПЦ — раздел 5 (по блокам НБУ, по кварталам)"],
+    *[[""] * 8 for _ in range(6)],
 ]
 out[f"B3_PRICES!A1:H{len(top)}"] = top
 
 # ANCHORS: masters for the first forecast cell of each row; copied right to BK
 look = lambda c, r: f"INDEX(B3_PRICES!$E${r}:$G${r};MATCH({c}$2;B3_PRICES!$E$10:$G$10;0))"
 out["ANCHORS!BB8"] = [[f"=BB5*AX9/100*(1+{look('BB', 23)}/100)"]]
-out["ANCHORS!BC10"] = [[f"={look('BC', 19)}"]]
 out["ANCHORS!BB11"] = [[f"={look('BB', 21)}"]]
 out["ANCHORS!BD12"] = [[f"=AZ12*(1+{look('BD', 11)}/100)"]]
 

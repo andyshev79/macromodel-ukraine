@@ -36,3 +36,18 @@ def test_cpi_blocks_payload():
     assert b3[15][0] == "CPI_Q" and "B3_PRICES!$D$52:$O$52" in out["ANCHORS!BB10"][0][0]
     # ru_RU locale: decimal commas inside formulas
     assert not any(re.search(r"\d\.\d", c) for r in b3 for c in r if isinstance(c, str) and c.startswith("="))
+
+
+def test_annual_cpi_comes_from_the_quarters_only():
+    """2026-11-03, Andrey: the old annual CPI equation stood next to the quarters and showed other numbers; it is gone.
+    Row 19 is December y/y, row 20 the average of the quarters, and the blocks take the rate effect straight from B7."""
+    import json, os, subprocess, sys
+    env = {**os.environ, "PYTHONPATH": "."}
+    run = lambda p: json.loads(subprocess.run([sys.executable, p], capture_output=True, text=True, env=env, check=True).stdout)
+    b3 = run("sheet/b3_payload.py")
+    top = b3["B3_PRICES!A1:H35"]
+    assert top[18][:2] == ["CPI_DEC", "ИПЦ, декабрь к декабрю"] and top[18][4] == "=ANCHORS!BC10"
+    assert top[19][0] == "CPI_YOY" and top[19][4] == "=AVERAGE(ANCHORS!AZ10:BC10)"
+    assert not any("CPI_M" == r[0] for r in top if r) and "ANCHORS!BC10" not in b3
+    blocks = run("sheet/cpi_blocks_payload.py")["B3_PRICES!A37:P75"][14]
+    assert blocks[0] == "CPI_B" and blocks[6].endswith("+B7_MONETARY!$E$42") and not any("$34" in str(c) for c in blocks)
