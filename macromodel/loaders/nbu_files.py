@@ -118,6 +118,60 @@ def bop_trade_m(p: Path) -> pd.DataFrame:
     return pd.DataFrame(out).sort_index()
 
 
+# BOP_m sheet 1.1 rows for financing and FDI. Labels repeat ("General government"), so each row is found as the n-th
+# "General government" after an anchor label.
+BOP_FIN = {"FDI_L": ("Direct investment: liabilities", None),
+           "GG_PORT_L": ("Portfolio investment: liabilities", "General government"),
+           "GG_LOANS_L": ("Other investment: liabilities", "General  government"),
+           "IMF_GG": ("E.2. IMF loans", "General  government")}
+
+
+def bop_fin_m(p: Path) -> pd.DataFrame:
+    """Monthly FDI liabilities and the parts of external financing of the government, USD million (BOP_m).
+
+    FIN_RECEIVED = government portfolio and loan liabilities + IMF loans to government + grants to government
+    (secondary income of general government, sheet 1.4); same parts as the API recipe in history.py."""
+    out = {}
+    rows = _rows(p, "1.1")
+    hi, cols = _month_cols(rows)
+    lab = lambda r: (r[2] or "").strip() if isinstance(r[2], str) else ""
+    for key, (anchor, sub) in BOP_FIN.items():
+        i = next(i for i in range(hi + 1, len(rows)) if lab(rows[i]).startswith(anchor))
+        if sub:
+            i = next(j for j in range(i + 1, len(rows)) if lab(rows[j]) == sub.strip() or (rows[j][2] or "") == sub)
+        out[key] = {per: float(rows[i][j]) for j, per in cols.items() if isinstance(rows[i][j], (int, float))}
+    rows = _rows(p, "1.4")
+    hi, cols = _month_cols(rows)
+    i = next(i for i in range(hi + 1, len(rows)) if lab(rows[i]).startswith("Secondary income"))
+    i = next(j for j in range(i + 1, len(rows)) if lab(rows[j]) == "General government")
+    out["GG_GRANTS"] = {per: float(rows[i][j]) for j, per in cols.items() if isinstance(rows[i][j], (int, float))}
+    df = pd.DataFrame(out).sort_index()
+    df["FIN_RECEIVED"] = df[["GG_PORT_L", "GG_LOANS_L", "IMF_GG", "GG_GRANTS"]].sum(axis=1, min_count=4)
+    return df
+
+
+PEREKAZ = {"REM_TOT": "Personal remittances", "REM_WAGE": "2. Net compensation", "REM_TRANSF": "3. Personal transfers"}
+
+
+def perekaz_m(p: Path) -> pd.DataFrame:
+    """Monthly private remittances, USD million (Perekaz_m sheet 1.1): total, net wages, transfers, and by channel.
+
+    The channel rows have no English label: official = the first unlabelled total after the transfers block,
+    informal = the last row of the table (NBU estimate)."""
+    rows = _rows(p, "1.1 ")
+    hi, cols = _month_cols(rows)
+    lab = lambda r: (r[2] or "").strip() if isinstance(r[2], str) else ""
+    out = {}
+    for key, start in PEREKAZ.items():
+        i = next(i for i in range(hi + 1, len(rows)) if lab(rows[i]).startswith(start))
+        out[key] = {per: float(rows[i][j]) for j, per in cols.items() if isinstance(rows[i][j], (int, float))}
+    data = [i for i in range(hi + 1, len(rows)) if any(isinstance(rows[i][j], (int, float)) for j in cols)]
+    unl = [i for i in data if not lab(rows[i])]
+    out["REM_OFF"] = {per: float(rows[unl[0]][j]) for j, per in cols.items() if isinstance(rows[unl[0]][j], (int, float))}
+    out["REM_INF"] = {per: float(rows[unl[-1]][j]) for j, per in cols.items() if isinstance(rows[unl[-1]][j], (int, float))}
+    return pd.DataFrame(out).sort_index()
+
+
 def gdp_y(p: Path) -> pd.DataFrame:
     """Annual GDP, SNA 2008 rows: nominal (UAH million), real index and deflator (% to previous year)."""
     rows = _rows(p, next(s for s in openpyxl.load_workbook(p, read_only=True).sheetnames if s.startswith("GDP")))

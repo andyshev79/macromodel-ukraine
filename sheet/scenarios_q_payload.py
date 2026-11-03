@@ -12,7 +12,10 @@ Quarter columns C:L of SCENARIOS are 2026Q3..2028Q4, the same order as ANCHORS B
 import json
 import sys
 
+import pandas as pd
+
 from macromodel import scenario_layout as SL
+from macromodel.blocks.real_sector import EXT
 
 QUARTERS = [f"{y}Q{q}" for y in (2026, 2027, 2028) for q in (1, 2, 3, 4)][2:]
 QCOLS = "CDEFGHIJKL"
@@ -54,8 +57,11 @@ out["B5_EXTERNAL!E17:G17"] = [[
 
 ov = lambda col, r: f"INDEX(SCENARIOS!$C${r}:$L${r};MATCH({col}$4;SCENARIOS!$C${HEAD}:$L${HEAD};0))"
 # quarterly financing received: given tranche, else the rest of the year over the empty quarters
-# 2026Q3: reserves are known, so the tranche is what closes the reserve change (B5 section 5); 2026Q4 = rest of the year
-out["ANCHORS!BB29:BC29"] = [[f"=IF({ov('BB', fa)}<>\"\";{ov('BB', fa)};B5_EXTERNAL!J69-(B5_EXTERNAL!I72-B5_EXTERNAL!J72+B5_EXTERNAL!J71))",
+# 2026Q3: fact from the NBU monthly balance of payments (government loans, portfolio, IMF, grants; BOP_m);
+# the reserve change then closes on "other flows" (B5 section 5); 2026Q4 = rest of the year
+bop = pd.read_csv(EXT / "bop_fin_m.csv", index_col="month")
+fin_q3 = round(float(bop.loc["2026-07":"2026-09", "FIN_RECEIVED"].sum()))
+out["ANCHORS!BB29:BC29"] = [[f"=IF({ov('BB', fa)}<>\"\";{ov('BB', fa)};{fin_q3})",
                              f"=IF({ov('BC', fa)}<>\"\";{ov('BC', fa)};B5_EXTERNAL!$E$32-SUM($AZ29:$BB29))"]]
 for start, (y, b5, actual) in {"BD": (2027, "F", ""), "BH": (2028, "G", "")}.items():
     c0, c1 = YEAR_COLS[y]
