@@ -50,3 +50,6 @@ for i, s in enumerate(SECTORS):
     for j, v in enumerate(("a", "b", "rho")):
         COEF_ROW[(s, v)] = COEF_FIRST + 3 * i + j
 COEF_ROW[("PPI", "rho")] = COEF_FIRST + 3 * len(SECTORS)
+PLATEAU = ("B",)   # sectors on the war plateau: level of the last nowcast quarter, moved only by seasonality
+for i, k in enumerate(range(1, 5)):
+    COEF_ROW[("B", f"s{k}")] = COEF_ROW[("PPI", "rho")] + 1 + i
