@@ -16,6 +16,7 @@ from macromodel.blocks.demand import link_other_to_consumption
 from macromodel.blocks.shocks import SHOCK_ROW, SHOCKS, estimated
 from sheet import recovery_layout as RL
 from sheet import recovery_payload as REC
+from sheet import nowcast_layout as NC
 
 B8Y = dict(zip("DEFG", "NOPQ"))  # B1 annual columns -> year columns of B8_CAPACITY section 3
 
@@ -188,6 +189,8 @@ for k, s in enumerate(CODES):
         else:
             c, p = QCOL[q], QCOL[QUARTERS[i - 4]]
             corr = f"+{c}{CORR[s]}" if s in CORR else ""
+            if s in NC.AF_ROW:  # nowcast add-factor from monthly Gosstat indices (NOWCAST section 4), 0 when it has faded
+                corr += f"+NOWCAST!{NC.QCOL[q]}{NC.AF_ROW[s]}"
             line.append(f"={p}{r}*(1+(INDEX($E${S2 + k}:$G${S2 + k};MATCH({c}${S3 - 2};$E$18:$G$18;0)){corr})/100)")
     body.append(line)
 body.append(["GDP_REAL_P", "ВВП по производству", "", "", "", "", ""] + [f"=SUM({QCOL[q]}{S3}:{QCOL[q]}{GDP3 - 1})" for q in QUARTERS])

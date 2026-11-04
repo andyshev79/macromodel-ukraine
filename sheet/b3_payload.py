@@ -104,7 +104,7 @@ out[f"B3_PRICES!A1:H{len(top)}"] = top
 # ANCHORS: masters for the first forecast cell of each row; copied right to BK
 look = lambda c, r: f"INDEX(B3_PRICES!$E${r}:$G${r};MATCH({c}$2;B3_PRICES!$E$10:$G$10;0))"
 out["ANCHORS!BB8"] = [[f"=BB5*AX9/100*(1+{look('BB', 23)}/100)"]]
-out["ANCHORS!BB11"] = [[f"={look('BB', 21)}"]]
+# ANCHORS row 11 (PPI) from 2026Q3: NOWCAST section 6 (fact of the quarter, then B3 annual + fading deviation)
 out["ANCHORS!BD12"] = [[f"=AZ12*(1+{look('BD', 11)}/100)"]]
 
 out["CHECKS!A20:C22"] = [["Цены"], ["Инфляция против цели НБУ", "Средний ИПЦ за год − 5%; не выше порога", 1.0], ["  статус"]]
