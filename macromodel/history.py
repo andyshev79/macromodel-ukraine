@@ -271,6 +271,14 @@ def _debt_gdp(d):
     return (debt / gdp4 * 100).dropna()
 
 
+def _pop(d):
+    """Population of the government-controlled territory (04.11.2026): Gosstat averages without
+    Crimea to 2021, then demographers' estimates by quarter (sources in the file). The World Bank
+    series used before covered the whole of Ukraine and rose in 2025."""
+    p = pd.read_csv(Path(__file__).resolve().parents[1] / "data" / "external" / "population_controlled.csv")
+    return pd.Series(p["pop_mln"].values, index=p["quarter"].values, dtype=float)
+
+
 def _cfc(d):
     pct = d.wb("NY.ADJ.DKAP.GN.ZS")
     gni = d.wb("NY.GNP.MKTP.CN") / 1e6
@@ -315,7 +323,7 @@ ANCHOR_RECIPES = [
     Recipe("NBU_RATE", "", "", "НБУ API", "KEY_PolicyRate, последний день квартала", lambda d: to_quarter(_key(d), "END")),
     Recipe("LOAN_RATE", "", "", "НБУ API", "Новые кредиты резидентам (кроме банков) в гривне, средневзвешенная по объёмам", lambda d: _rate(d, "loan_rates_m", "New_Loans_Res")),
     Recipe("DEP_RATE", "", "", "НБУ API", "Новые депозиты резидентов (кроме банков) в гривне, средневзвешенная по объёмам", lambda d: _rate(d, "dep_rates_m", "New_Deposits_Res")),
-    Recipe("POP", "", "", "Всемирный банк (оценка)", "SP.POP.TOTL, годовое значение на все кварталы; вся Украина по оценке ВБ, не подконтрольная территория", lambda d: annual_to_q(d.wb("SP.POP.TOTL") / 1e6, "AVG")),
+    Recipe("POP", "", "", "Госстат до 2021; оценки демографов; data/external/population_controlled.csv", "Подконтрольная территория (до 2021 — без Крыма и Севастополя), среднее за квартал; с 2026Q3 прогноз в ANCHORS (миграция B4 + естественная убыль)", _pop),
     Recipe("EMPL", "", "", "НБУ API (Госстат, ОРС)", "Занятые 15–70, из накопленных средних; обследование прекращено после 2021", lambda d: q_label(_lfs(d, "lmss_actnas_ep1570ap_"))),
     Recipe("UNEMP", "", "", "НБУ API (Госстат, ОРС)", "Безработные / экономически активные 15–70; после 2021 нет данных", _unemp),
     Recipe("WAGE_NOM", "", "", "НБУ API (Госстат); НБУ Wages_m.xlsx; пропуски из MacroStat", "Средняя месячная зарплата, среднее за квартал; 2010–2012 из файла НБУ Wages_m; оставшиеся пропуски 2022–2024 из квартальных данных Госстата (лист Salary)", _wage),
