@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT))
 from macromodel.anchors import ANCHORS
 
 OUT = ROOT / "data" / "recalc"
-BLOCKS = ["b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"]
+BLOCKS = ["b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8", "annual"]  # annual: POP / GFCF / CFC rules in ANCHORS
 TEXT_SHEETS = ("B1_REAL", "B2_DEMAND", "B3_PRICES", "B4_LABOUR", "B7_MONETARY")  # equation texts follow the estimates
 FIRST_ROW, FIRST_Q, LAST_FACT = 5, "2015Q1", "2026Q2"  # ANCHORS layout: row 5 = first anchor, H = 2015Q1
 FORMULA_ROWS = {"DEFL", "TRADE_BAL", "FIN_GAP_USD"}
