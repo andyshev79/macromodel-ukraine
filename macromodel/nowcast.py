@@ -43,8 +43,8 @@ RHO_EXCL = EXCL   # pairs that touch 2022 are dropped
 RHO_CLIP = (0.3, 0.9)
 
 
-def monthly_yoy(name: str) -> pd.Series:
-    """Monthly y/y, % (index 100 = no change -> 0)."""
+def _cache(name: str) -> pd.Series:
+    """Monthly y/y from the Gosstat cache, %."""
     f, keys, kind = IND[name]
     d = pd.read_csv(UK / f"{f}.csv.gz")
     d = d[d.series.isin(keys)].dropna(subset=["value"])
@@ -57,6 +57,34 @@ def monthly_yoy(name: str) -> pd.Series:
         s.index = s.index.astype(str)
     s.index = pd.PeriodIndex(s.index, freq="M")
     return s.sort_index()
+
+
+# Months the Gosstat cache does not have yet, typed from Andrey's sheet (tab SectorIndexes M): total industry
+# and construction, y/y index. Sections B/C/D for such a month = the section's last month + the change of the
+# total industry y/y between the two months (the total is published first, sections a few days later).
+EXTRA = ROOT / "data" / "external" / "sector_indexes_m.csv"
+SECTIONS = ("IND_B", "IND_C", "IND_D")
+
+
+def _extra(name: str, s: pd.Series) -> pd.Series:
+    if not EXTRA.exists():
+        return s
+    e = pd.read_csv(EXTRA, index_col=0)
+    e.index = pd.PeriodIndex(e.index, freq="M")
+    if name in e.columns:
+        add = e[name].dropna() - 100
+        return pd.concat([s, add[~add.index.isin(s.index)]]).sort_index()
+    if name in SECTIONS:
+        tot = _extra("IND_BCD", _cache("IND_BCD"))
+        for m in tot.index[tot.index > s.index.max()]:
+            s.loc[m] = s.iloc[-1] + tot[m] - tot[m - 1]
+        return s.sort_index()
+    return s
+
+
+def monthly_yoy(name: str) -> pd.Series:
+    """Monthly y/y, % (index 100 = no change -> 0): the Gosstat cache plus months from Andrey's sheet."""
+    return _extra(name, _cache(name))
 
 
 def quarterly(m: pd.Series, months: int | None = None) -> pd.Series:
