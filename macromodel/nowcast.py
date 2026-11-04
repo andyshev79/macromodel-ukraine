@@ -60,8 +60,9 @@ def _cache(name: str) -> pd.Series:
 
 
 # Months the Gosstat cache does not have yet, typed from Andrey's sheet (tab SectorIndexes M): total industry
-# and construction, y/y index. Sections B/C/D for such a month = the section's last month + the change of the
-# total industry y/y between the two months (the total is published first, sections a few days later).
+# and construction, y/y index. Sections B/C/D: the sheet has only the cumulative index since January, so the
+# month = n x cumulative(n months) - (n-1) x cumulative(n-1), typed into the file. If a section month is still
+# missing, it is the section's last month + the change of the total industry y/y between the two months.
 EXTRA = ROOT / "data" / "external" / "sector_indexes_m.csv"
 SECTIONS = ("IND_B", "IND_C", "IND_D")
 
@@ -73,7 +74,7 @@ def _extra(name: str, s: pd.Series) -> pd.Series:
     e.index = pd.PeriodIndex(e.index, freq="M")
     if name in e.columns:
         add = e[name].dropna() - 100
-        return pd.concat([s, add[~add.index.isin(s.index)]]).sort_index()
+        s = pd.concat([s, add[~add.index.isin(s.index)]]).sort_index()
     if name in SECTIONS:
         tot = _extra("IND_BCD", _cache("IND_BCD"))
         for m in tot.index[tot.index > s.index.max()]:
