@@ -25,7 +25,8 @@ from sheet.nowcast_layout import (AF_ROW, B1_ANNUAL, B1_CORR, B1_ROW, B_HDR, B_R
 TODAY = "2026-11-04"
 FLASH = {"2026Q3": -0.7}       # Gosstat flash estimate of real GDP, % y/y (published 2026-11)
 YEAR_GAP = 5   # pp: annual equation vs fact + nowcast of the year so far
-HOLD = {"B"}   # sectors that keep the last nowcast y/y to the end of the year, then fade by rho
+HOLD = {"B"}   # sectors that keep the last nowcast y/y until the ceasefire, then fade by rho
+PEACE_FLAG_ROW = 53   # B2_DEMAND PEACE_Q: 1 from the ceasefire quarter of the active scenario (sheet/b2_payload.py FLAG)
 SECTOR_NAME = {"A": "Сельское хозяйство", "B": "Добыча", "C": "Переработка", "D": "Энергетика", "F": "Строительство",
                "G": "Торговля", "H": "Транспорт"}
 SRC = {"AGRO": "Госстат, индекс сельхозпродукции", "IND_B": "Госстат, индекс промпроизводства",
@@ -136,12 +137,13 @@ for s in SECTORS:
         if q == FIRST_FC:
             dv.append(f'=IF({nc_}<>"";1;0)')
             af.append(f'=IF({nc_}<>"";{nc_}-{c}{R["EQ"]};0)')
-        elif s in HOLD and q[:4] == FIRST_FC[:4]:
-            # until the year ends the sector keeps the y/y of the last quarter with data (Andrey 04.11.2026: mining
-            # mixes energy and non-energy extraction, a split or a strike input is not worth it)
-            p = QCOL[qprev(q)]
-            dv.append(f'=IF({nc_}<>"";1;{p}{R["DEV"]})')
-            af.append(f'=IF({nc_}<>"";{nc_}-{c}{R["EQ"]};{p}{R["EQ"]}+{p}{R["AF"]}-{c}{R["EQ"]})')
+        elif s in HOLD:
+            # while the war lasts (B2_DEMAND PEACE_Q = 0) the sector keeps the y/y of the last quarter with data, after the
+            # ceasefire the gap to the equation fades by rho (Andrey 04.11.2026: mining mixes energy and non-energy
+            # extraction, a split or a strike input is not worth it)
+            p, war = QCOL[qprev(q)], f"B2_DEMAND!{b1c(q)}{PEACE_FLAG_ROW}=0"
+            dv.append(f'=IF({nc_}<>"";1;IF({war};{p}{R["DEV"]};{p}{R["DEV"]}*{E((s, "rho"))}))')
+            af.append(f'=IF({nc_}<>"";{nc_}-{c}{R["EQ"]};IF({war};{p}{R["EQ"]}+{p}{R["AF"]}-{c}{R["EQ"]};{p}{R["AF"]}*{E((s, "rho"))}))')
         else:
             p = QCOL[qprev(q)]
             dv.append(f'=IF({nc_}<>"";1;{p}{R["DEV"]}*{E((s, "rho"))})')
