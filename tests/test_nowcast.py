@@ -38,3 +38,8 @@ def test_b1_formula_has_nowcast_term():
     assert gva_b[7 + 46].endswith(f"+NOWCAST!J{L.AF_ROW['B']})/100)")   # 2026Q3 = column BB in B1, J in NOWCAST
     gva_j = next(r for r in rows if r and r[0] == "GVA_J")
     assert "NOWCAST" not in gva_j[7 + 46]
+
+
+def test_mining_seasonality():
+    s = N.seasonal("B")
+    assert abs(sum(s.values()) - 4) < 1e-6 and s[1] < s[2] < s[3]

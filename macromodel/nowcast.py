@@ -201,3 +201,25 @@ if __name__ == "__main__":
     print("rho PPI", round(ppi_rho(), 2))
     for n in IND:
         print(n, indicator_q(n).tail(3).round(1).to_dict())
+
+
+def seasonal(sector: str = "B", years=(2015, 2025)) -> dict:
+    """Seasonal factors of the sector's real GVA: quarter level / mean level of its year, averaged over the years
+    (without 2022). Real levels: 2021 nominal quarters chained back and forward by the y/y growth."""
+    h = hist_q()
+    n, y = h.loc[f"GVA_{sector}_NOM"].dropna(), h.loc[f"GVA_{sector}_YOY"].dropna()
+    lv = {q: n[q] for q in ("2021Q1", "2021Q2", "2021Q3", "2021Q4")}
+    shift = lambda q, k: str(pd.Period(q, freq="Q") + k)
+    for q in sorted(y.index):
+        if q not in lv and shift(q, -4) in lv:
+            lv[q] = lv[shift(q, -4)] * (1 + y[q] / 100)
+    for q in sorted(y.index, reverse=True):
+        if q not in lv and shift(q, 4) in lv and shift(q, 4) in y.index:
+            lv[q] = lv[shift(q, 4)] / (1 + y[shift(q, 4)] / 100)
+    s = pd.Series(lv)
+    s.index = pd.PeriodIndex(s.index, freq="Q")
+    d = pd.DataFrame({"v": s, "y": s.index.year, "k": s.index.quarter})
+    d = d[(d.y >= years[0]) & (d.y <= years[1]) & ~d.y.isin([2022])]
+    d = d[d.groupby("y").v.transform("size") == 4]
+    d["r"] = d.v / d.groupby("y").v.transform("mean")
+    return {int(k): float(v) for k, v in d.groupby("k").r.mean().items()}

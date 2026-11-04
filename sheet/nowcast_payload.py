@@ -20,12 +20,11 @@ import pandas as pd
 from macromodel import nowcast as N
 from sheet.nowcast_layout import (AF_ROW, B1_ANNUAL, B1_CORR, B1_ROW, B_HDR, B_ROW, COEF_ROW, F_HDR, F_ROW, FC, FIRST_FC,
                                   INDS, M_HDR, M_ROW, MCOL, MONTHS, N_HDR, N_ROW, P_HDR, P_ROW, Q_HDR, Q_ROW, QCOL,
-                                  QUARTERS, SECTORS, col)
+                                  PLATEAU, QUARTERS, SECTORS, col)
 
 TODAY = "2026-11-04"
 FLASH = {"2026Q3": -0.7}       # Gosstat flash estimate of real GDP, % y/y (published 2026-11)
 YEAR_GAP = 5   # pp: annual equation vs fact + nowcast of the year so far
-HOLD = {"B"}   # sectors that keep the last nowcast y/y until the ceasefire, then fade by rho
 PEACE_FLAG_ROW = 53   # B2_DEMAND PEACE_Q: 1 from the ceasefire quarter of the active scenario (sheet/b2_payload.py FLAG)
 SECTOR_NAME = {"A": "Сельское хозяйство", "B": "Добыча", "C": "Переработка", "D": "Энергетика", "F": "Строительство",
                "G": "Торговля", "H": "Транспорт"}
@@ -60,7 +59,12 @@ for s in SECTORS:
                       f"Наукаст: {note}"])
 coefs.append(["NC_PPI_rho", "NOWCAST", "PPI_YOY", "rho", round(rho_ppi, 3), "", "", "2016–2025", "AR(1)", "", TODAY,
               "Затухание отклонения ИЦП г/г от годового прогноза B3 за квартал: AR(1) ИЦП г/г (конец квартала), без 2022"])
-out[f"COEFS!A{COEF_ROW[('A', 'a')]}:L{COEF_ROW[('PPI', 'rho')]}"] = coefs
+SEAS = N.seasonal("B")
+for k in range(1, 5):
+    coefs.append([f"NC_B_s{k}", "NOWCAST", "GVA_B", f"s{k}", round(SEAS[k], 3), "", "", "2015–2025, без 2022", "средняя", "", TODAY,
+                  f"Сезонность добычи: уровень {k}-го квартала / средний уровень года (реальная ВДС). Плато войны: "
+                  "уровень прошлого квартала × s(квартал) / s(прошлый квартал)"])
+out[f"COEFS!A{COEF_ROW[('A', 'a')]}:L{COEF_ROW[('B', 's4')]}"] = coefs
 
 # title
 out["NOWCAST!A1:B2"] = [["NOWCAST — текущий квартал по месячным данным Госстата", ""],
@@ -137,13 +141,15 @@ for s in SECTORS:
         if q == FIRST_FC:
             dv.append(f'=IF({nc_}<>"";1;0)')
             af.append(f'=IF({nc_}<>"";{nc_}-{c}{R["EQ"]};0)')
-        elif s in HOLD:
-            # while the war lasts (B2_DEMAND PEACE_Q = 0) the sector keeps the y/y of the last quarter with data, after the
-            # ceasefire the gap to the equation fades by rho (Andrey 04.11.2026: mining mixes energy and non-energy
-            # extraction, a split or a strike input is not worth it)
+        elif s in PLATEAU:
+            # war plateau (Andrey 04.11.2026): while the war lasts (B2_DEMAND PEACE_Q = 0) the level stays at the previous
+            # quarter's and moves only with the seasonality, so the y/y fall stops once the base effect is gone; after the
+            # ceasefire the gap to the equation fades by rho. Mining is not split (energy and non-energy extraction mixed)
             p, war = QCOL[qprev(q)], f"B2_DEMAND!{b1c(q)}{PEACE_FLAG_ROW}=0"
+            sk = lambda cc: f"INDEX({E((s, 's1'))}:$E${COEF_ROW[(s, 's4')]};VALUE(RIGHT({cc}${N_HDR};1)))"
+            plateau = (f"B1_REAL!{b1c(qprev(q))}{B1_ROW[s]}*{sk(c)}/{sk(p)}/B1_REAL!{b1c(q4(q))}{B1_ROW[s]}*100-100")
             dv.append(f'=IF({nc_}<>"";1;IF({war};{p}{R["DEV"]};{p}{R["DEV"]}*{E((s, "rho"))}))')
-            af.append(f'=IF({nc_}<>"";{nc_}-{c}{R["EQ"]};IF({war};{p}{R["EQ"]}+{p}{R["AF"]}-{c}{R["EQ"]};{p}{R["AF"]}*{E((s, "rho"))}))')
+            af.append(f'=IF({nc_}<>"";{nc_}-{c}{R["EQ"]};IF({war};{plateau}-{c}{R["EQ"]};{p}{R["AF"]}*{E((s, "rho"))}))')
         else:
             p = QCOL[qprev(q)]
             dv.append(f'=IF({nc_}<>"";1;{p}{R["DEV"]}*{E((s, "rho"))})')
