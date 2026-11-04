@@ -1,4 +1,4 @@
-period,IND_BCD,CONSTR,source
-2026-07,98.3,74.1,"Andrey's sheet 11d11t-sQ7ESeZWnu3KkjWRjWEVuWwaajzuKniL39F_k, tab SectorIndexes M (Gosstat), y/y index"
-2026-08,93.9,96.3,same
-2026-09,90.8,98.43002336,same
+period,IND_BCD,CONSTR,IND_B,IND_C,IND_D,source
+2026-07,98.3,74.1,,,,"Andrey's sheet 11d11t-sQ7ESeZWnu3KkjWRjWEVuWwaajzuKniL39F_k, tab SectorIndexes M (Gosstat), y/y index"
+2026-08,93.9,96.3,,,,same
+2026-09,90.8,98.43002336,87.8,91.9,87.3,"same; B/C/D = 9 x Jan-Sep cumulative - 8 x Jan-Aug cumulative (B 99.8/101.3, C 99.9/100.9, D 87.3/87.3)"
