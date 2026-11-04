@@ -20,7 +20,7 @@ RED = {"red": 0.957, "green": 0.8, "blue": 0.8}
 GREEN = {"red": 0.851, "green": 0.918, "blue": 0.824}
 
 # number format per row (by unit): percents and indices one decimal, money and people as integers
-FMT = {"0.0": ["DEFL", "CPI_YOY", "PPI_YOY", "NBU_RATE", "LOAN_RATE", "DEP_RATE", "POP", "UNEMP", "DEBT_GDP"],
+FMT = {"0.0": ["GDP_REAL_P", "DEFL", "CPI_YOY", "PPI_YOY", "NBU_RATE", "LOAN_RATE", "DEP_RATE", "POP", "UNEMP", "DEBT_GDP"],
        "0.00": ["FX_AVG", "FX_EOP"]}
 GROUPS = ["DEFL", "PPI_YOY", "DEP_RATE", "WAGE_NOM", "RES_USD", "CFC", "DEBT_GDP"]  # last row of each group
 
@@ -78,6 +78,9 @@ for c in GROUPS:
 # border between the last full fact year (2025, column O) and 2026
 req.append({"updateBorders": {"range": rng(2, LAST, 15, 16), "left": {"style": "SOLID_MEDIUM", "color": DARK}}})
 req.append({"updateBorders": {"range": rng(2, LAST, 18, 19), "left": {"style": "SOLID", "color": GREY}}})
+# row 7 (GDP by expenditure = row 5 by construction) hidden, row 6 shows growth (sheet/annual_payload.py)
+req.append({"updateDimensionProperties": {"range": {"sheetId": SID, "dimension": "ROWS", "startIndex": 6, "endIndex": 7},
+                                          "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}})
 # column widths
 for c0, c1, px in ((0, 1, 120), (1, 2, 300), (2, 3, 170), (3, 4, 80), (4, 18, 90), (18, 19, 480)):
     req.append({"updateDimensionProperties": {"range": {"sheetId": SID, "dimension": "COLUMNS", "startIndex": c0, "endIndex": c1},
