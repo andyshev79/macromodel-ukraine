@@ -22,6 +22,8 @@ YEAR_COL = {"2026": "E", "2027": "F", "2028": "G"}  # B3 annual columns
 SC_YEAR = {"2026": "L", "2027": "M", "2028": "N"}  # SCENARIOS active annual columns
 PRESS_2026Q3 = {"CORE": 8.8, "RAW": 6.7, "ADM": 13.6, "FUEL": 46.2}  # NBU, September 2026 y/y
 BRENT_2025 = [75.8, 68.0, 69.0, 63.6]
+from sheet import cpi_m_layout as CM  # 2026Q4-2027Q1: monthly nowcast (CPI_M section 2), 12.11.2026
+NC = {CM.B3_COL[q]: CM.S2_COL[q] for q in CM.B3_COL}  # B3 column -> CPI_M column
 from sheet.scenarios_quarterly_payload import ROW as QROW  # main quarterly block of SCENARIOS (D:M = 2026Q3..2028Q4)
 BRENT_Y = SL.BRENT  # Brent: one value a year in the annual table, active columns L:N (quarterly rows removed 2026-11-03)
 MAIN_Q = {c: s for c, s in zip(COLS[2:], "DEFGHIJKLM")}
@@ -102,11 +104,13 @@ rows = [
     ["RAW", B.NAMES["RAW"], f"{kv('RAW', 'const')} + {kv('RAW', 'RAW_L1')} × прошлый квартал + {kv('RAW', 'FUEL_L1')} × топливо прошлого квартала "
                             f"{kv('RAW', 'HARV')} × рост урожая"]
     + [fact("RAW", i) for i in range(FACT)]
-    + [f"={C('RAW', 'const')}+{C('RAW', 'RAW_L1')}*{prev(c)}38+{C('RAW', 'FUEL_L1')}*{prev(c)}37+{C('RAW', 'HARV')}*{c}36" for c in fc]
-    + ["овощи, фрукты, мясо, яйца, молоко"],
+    + [f"=CPI_M!{NC[c]}{CM.S2_ROW['RAW']}" if c in NC else
+       f"={C('RAW', 'const')}+{C('RAW', 'RAW_L1')}*{prev(c)}38+{C('RAW', 'FUEL_L1')}*{prev(c)}37+{C('RAW', 'HARV')}*{c}36" for c in fc]
+    + ["овощи, фрукты, мясо, яйца, молоко; 2026Q4–2027Q1 — nowcast CPI_M (раздел 2)"],
     ["ADM_X", "Админцены без тарифов ЖКУ", f"{kv('ADM', 'const')} + {kv('ADM', 'ADM_L1')} × прошлый квартал"]
     + [fact("ADM", i) for i in range(FACT)]
-    + [f"={C('ADM', 'const')}+{C('ADM', 'ADM_L1')}*{prev(c)}39" for c in fc] + ["акцизы на табак и алкоголь, проезд, связь"],
+    + [f"=CPI_M!{NC[c]}{CM.S2_ROW['ADM']}-{c}40" if c in NC else f"={C('ADM', 'const')}+{C('ADM', 'ADM_L1')}*{prev(c)}39"
+       for c in fc] + ["акцизы на табак и алкоголь, проезд, связь; 2026Q4–2027Q1 — nowcast CPI_M минус тарифы"],
     ["ADM_T", "Вклад повышения тарифов ЖКУ", "доля ЖКУ в админценах × повышения за 4 квартала", 0, 0]
     + [f"={C('ADM', 'TARIFF')}*{tariffs(c)}" for c in COLS[2:]]
     + [f"SCENARIOS строка {TARIFF_ROW}, только после отмены военного положения (строка {TA['EFF']})"],
@@ -115,15 +119,18 @@ rows = [
     ["CORE", B.NAMES["CORE"], f"{kv('CORE', 'const')} + {kv('CORE', 'FX')} × девальвация + {kv('CORE', 'WAGE')} × зарплата "
                               f"+ {kv('CORE', 'CORE_L1')} × прошлый квартал"]
     + [fact("CORE", i) for i in range(FACT)]
-    + [f"={C('CORE', 'const')}+{C('CORE', 'FX')}*{c}32+{C('CORE', 'WAGE')}*{c}33+{C('CORE', 'CORE_L1')}*{prev(c)}42" for c in fc]
-    + ["обработанные продукты, непродовольственные товары, услуги"],
+    + [f"=CPI_M!{NC[c]}{CM.S2_ROW['CORE']}" if c in NC else
+       f"={C('CORE', 'const')}+{C('CORE', 'FX')}*{c}32+{C('CORE', 'WAGE')}*{c}33+{C('CORE', 'CORE_L1')}*{prev(c)}42" for c in fc]
+    + ["обработанные продукты, непродовольственные товары, услуги; 2026Q4–2027Q1 — nowcast CPI_M"],
     ["CPI_B", "ИПЦ из блоков", f"{kv('W', 'const')} + {kv('W', 'CORE')}×базовая + {kv('W', 'RAW')}×сырые + {kv('W', 'ADM')}×админ "
                               f"+ {kv('W', 'FUEL')}×топливо + влияние ставки (B7)"]
     + [f"={C('W', 'const')}+{C('W', 'CORE')}*{c}42+{C('W', 'RAW')}*{c}38+{C('W', 'ADM')}*{c}41+{C('W', 'FUEL')}*{c}37"
        + ("" if c in COLS[:FACT] else f"+B7_MONETARY!${YEAR_COL[year(c)]}$42") for c in COLS]
     + ["2026Q1–Q3: проверка весов на факте"],
     ["CPI_Q", "ИПЦ в модели", f"факт; задано в SCENARIOS строка {SL.CPI_Q}; иначе строка 43 этого листа", "=ANCHORS!AZ10", "=ANCHORS!BA10"]
-    + [f"=IF(SCENARIOS!{SCQ[c]}{SL.CPI_Q}<>\"\";SCENARIOS!{SCQ[c]}{SL.CPI_Q};{c}43)" for c in COLS[2:]] + ["идёт в ANCHORS, строка 10"],
+    + [f"=IF(SCENARIOS!{SCQ[c]}{SL.CPI_Q}<>\"\";SCENARIOS!{SCQ[c]}{SL.CPI_Q};"
+       + (f"CPI_M!{NC[c]}{CM.S2_ROW['CPI']})" if c in NC else f"{c}43)") for c in COLS[2:]]
+    + ["идёт в ANCHORS, строка 10; 2026Q4–2027Q1 — nowcast CPI_M, если в SCENARIOS строка 90 пусто"],
     [""],
     ["5. Вклады блоков в ИПЦ, п.п."],
     ["Код", "Блок", ""] + QUARTERS,
